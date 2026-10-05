@@ -92,7 +92,17 @@ function createPostgresStatement(sql) {
     },
     run: async (...args) => {
       const params = flattenArgs(args);
-      const res = await pgPool.query(insertWithReturning, params);
+      let res;
+      try {
+        res = await pgPool.query(insertWithReturning, params);
+      } catch (err) {
+        // Fallback: If appending RETURNING id failed because column "id" does not exist (code 42703), retry without RETURNING id
+        if ((err.code === '42703' || (err.message && err.message.includes('column "id" does not exist'))) && insertWithReturning !== pgSql) {
+          res = await pgPool.query(pgSql, params);
+        } else {
+          throw err;
+        }
+      }
       const lastInsertRowid = res.rows && res.rows[0] && res.rows[0].id !== undefined
         ? Number(res.rows[0].id)
         : null;
@@ -284,10 +294,25 @@ const POSTGRES_SCHEMA = `
   );
 
   CREATE TABLE IF NOT EXISTS platform_settings (
-    key TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,
     value TEXT NOT NULL,
     description TEXT
   );
+
+  CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+  CREATE INDEX IF NOT EXISTS idx_teacher_profiles_user_id ON teacher_profiles(user_id);
+  CREATE INDEX IF NOT EXISTS idx_courses_teacher_id ON courses(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_sections_course_id ON sections(course_id);
+  CREATE INDEX IF NOT EXISTS idx_lessons_course_id ON lessons(course_id);
+  CREATE INDEX IF NOT EXISTS idx_lessons_section_id ON lessons(section_id);
+  CREATE INDEX IF NOT EXISTS idx_subscriptions_student_id ON subscriptions(student_id);
+  CREATE INDEX IF NOT EXISTS idx_subscriptions_teacher_id ON subscriptions(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_payments_student_id ON payments(student_id);
+  CREATE INDEX IF NOT EXISTS idx_payments_teacher_id ON payments(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_progress_student_id ON progress(student_id);
+  CREATE INDEX IF NOT EXISTS idx_reviews_teacher_id ON reviews(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_platform_settings_key ON platform_settings(key);
 `;
 
 const SQLITE_SCHEMA = `
@@ -441,23 +466,63 @@ const SQLITE_SCHEMA = `
   );
 
   CREATE TABLE IF NOT EXISTS platform_settings (
-    key TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
     value TEXT NOT NULL,
     description TEXT
   );
+
+  CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+  CREATE INDEX IF NOT EXISTS idx_teacher_profiles_user_id ON teacher_profiles(user_id);
+  CREATE INDEX IF NOT EXISTS idx_courses_teacher_id ON courses(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_sections_course_id ON sections(course_id);
+  CREATE INDEX IF NOT EXISTS idx_lessons_course_id ON lessons(course_id);
+  CREATE INDEX IF NOT EXISTS idx_lessons_section_id ON lessons(section_id);
+  CREATE INDEX IF NOT EXISTS idx_subscriptions_student_id ON subscriptions(student_id);
+  CREATE INDEX IF NOT EXISTS idx_subscriptions_teacher_id ON subscriptions(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_payments_student_id ON payments(student_id);
+  CREATE INDEX IF NOT EXISTS idx_payments_teacher_id ON payments(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_progress_student_id ON progress(student_id);
+  CREATE INDEX IF NOT EXISTS idx_reviews_teacher_id ON reviews(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_platform_settings_key ON platform_settings(key);
 `;
 
 export async function initDatabase() {
   if (isPostgres) {
     await db.exec(POSTGRES_SCHEMA);
+    // Backward-compatibility: Ensure existing PostgreSQL tables have the id column
+    try {
+      await db.exec('ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS id SERIAL;');
+    } catch (err) {
+      console.warn('PostgreSQL migration notice for platform_settings id column:', err.message);
+    }
   } else {
     await db.exec(SQLITE_SCHEMA);
+    // Backward-compatibility: Ensure existing SQLite tables have the id column
+    try {
+      const cols = sqliteDb.prepare('PRAGMA table_info(platform_settings)').all();
+      const hasId = cols.some(c => c.name === 'id');
+      if (!hasId) {
+        sqliteDb.exec('ALTER TABLE platform_settings ADD COLUMN id INTEGER;');
+      }
+      sqliteDb.exec(`
+        UPDATE platform_settings SET id = (SELECT COUNT(*) FROM platform_settings p2 WHERE p2.rowid <= platform_settings.rowid) WHERE id IS NULL;
+        CREATE TRIGGER IF NOT EXISTS trg_platform_settings_id
+        AFTER INSERT ON platform_settings
+        WHEN new.id IS NULL
+        BEGIN
+          UPDATE platform_settings SET id = (SELECT COALESCE(MAX(id), 0) + 1 FROM platform_settings) WHERE rowid = new.rowid;
+        END;
+      `);
+    } catch (err) {
+      console.warn('SQLite migration notice for platform_settings id column:', err.message);
+    }
   }
 
   // Default platform settings
   const checkSetting = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_commission_percentage');
   if (!checkSetting) {
-    await db.prepare('INSERT INTO platform_settings (key, value, description) VALUES (?, ?, ?)').run(
+    await db.prepare('INSERT INTO platform_settings (key, value, description) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING').run(
       'platform_commission_percentage',
       '20',
       'Platform commission cut on subscription revenue (e.g. 20%)'
@@ -466,7 +531,7 @@ export async function initDatabase() {
 
   const currentPlatformName = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_name');
   if (!currentPlatformName) {
-    await db.prepare('INSERT INTO platform_settings (key, value, description) VALUES (?, ?, ?)').run(
+    await db.prepare('INSERT INTO platform_settings (key, value, description) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING').run(
       'platform_name',
       'Korsa',
       'Education platform name'
@@ -477,7 +542,7 @@ export async function initDatabase() {
 
   const currentSiteName = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('site_name');
   if (!currentSiteName) {
-    await db.prepare('INSERT INTO platform_settings (key, value, description) VALUES (?, ?, ?)').run(
+    await db.prepare('INSERT INTO platform_settings (key, value, description) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING').run(
       'site_name',
       'Korsa',
       'Public site brand name'
