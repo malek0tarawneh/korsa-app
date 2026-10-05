@@ -18,7 +18,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user exists
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase().trim());
+    const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase().trim());
     if (existing) {
       return res.status(400).json({ error: 'An account with this email already exists' });
     }
@@ -32,19 +32,19 @@ router.post('/register', async (req, res) => {
       VALUES (?, ?, ?, ?, ?)
     `);
 
-    const userResult = insertUser.run(normalizedEmail, passwordHash, role, name, avatarUrl);
+    const userResult = await insertUser.run(normalizedEmail, passwordHash, role, name, avatarUrl);
     const userId = userResult.lastInsertRowid;
 
     if (role === 'student') {
       const insertStudent = db.prepare('INSERT INTO student_profiles (user_id, educational_level, bio) VALUES (?, ?, ?)');
-      insertStudent.run(userId, educational_levels || 'High School', bio || '');
+      await insertStudent.run(userId, educational_levels || 'High School', bio || '');
     } else if (role === 'teacher') {
       const insertTeacher = db.prepare(`
         INSERT INTO teacher_profiles 
         (user_id, headline, bio, subjects, educational_levels, monthly_price_cents, is_approved, rating, review_count, subscriber_count)
         VALUES (?, ?, ?, ?, ?, ?, 1, 5.0, 0, 0)
       `);
-      insertTeacher.run(
+      await insertTeacher.run(
         userId,
         headline || 'Educator',
         bio || 'Experienced teacher providing high quality education.',
@@ -77,7 +77,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -109,9 +109,9 @@ router.post('/login', async (req, res) => {
 });
 
 // Get current user profile and active subscriptions
-router.get('/me', requireAuth, (req, res) => {
+router.get('/me', requireAuth, async (req, res) => {
   try {
-    const user = db.prepare('SELECT id, email, role, name, avatar_url, created_at FROM users WHERE id = ?').get(req.user.id);
+    const user = await db.prepare('SELECT id, email, role, name, avatar_url, created_at FROM users WHERE id = ?').get(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -120,16 +120,16 @@ router.get('/me', requireAuth, (req, res) => {
     let activeSubscriptions = [];
 
     if (user.role === 'teacher') {
-      profile = db.prepare('SELECT * FROM teacher_profiles WHERE user_id = ?').get(user.id);
+      profile = await db.prepare('SELECT * FROM teacher_profiles WHERE user_id = ?').get(user.id);
       if (profile) {
         profile.subjects = JSON.parse(profile.subjects || '[]');
         profile.educational_levels = JSON.parse(profile.educational_levels || '[]');
       }
     } else if (user.role === 'student') {
-      profile = db.prepare('SELECT * FROM student_profiles WHERE user_id = ?').get(user.id);
+      profile = await db.prepare('SELECT * FROM student_profiles WHERE user_id = ?').get(user.id);
       
       // Get all active teacher subscriptions for this student
-      const subs = db.prepare(`
+      const subs = await db.prepare(`
         SELECT teacher_id FROM subscriptions 
         WHERE student_id = ? AND status = 'active'
       `).all(user.id);

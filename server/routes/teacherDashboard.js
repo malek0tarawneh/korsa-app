@@ -5,36 +5,36 @@ import { requireRole } from '../auth.js';
 const router = express.Router();
 
 // Helper: platform commission percentage
-function getPlatformCommissionRate() {
-  const row = db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_commission_percentage');
+async function getPlatformCommissionRate() {
+  const row = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_commission_percentage');
   const percent = row ? parseFloat(row.value) : 20;
   return isNaN(percent) ? 0.20 : percent / 100;
 }
 
 // Teacher Overview & Financial Simulation
-router.get('/overview', requireRole('teacher'), (req, res) => {
+router.get('/overview', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
 
     // Teacher profile info
-    const profile = db.prepare('SELECT * FROM teacher_profiles WHERE user_id = ?').get(teacherId);
+    const profile = await db.prepare('SELECT * FROM teacher_profiles WHERE user_id = ?').get(teacherId);
     if (!profile) {
       return res.status(404).json({ error: 'Teacher profile not found' });
     }
 
     // Active subscribers count
-    const subCountRow = db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(teacherId);
-    const activeSubscribers = subCountRow ? subCountRow.count : 0;
+    const subCountRow = await db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(teacherId);
+    const activeSubscribers = Number(subCountRow?.count || 0);
 
     // Monthly subscription price
     const monthlyPriceCents = profile.monthly_price_cents;
     const grossMonthlyRevenueCents = activeSubscribers * monthlyPriceCents;
-    const commissionRate = getPlatformCommissionRate();
+    const commissionRate = await getPlatformCommissionRate();
     const platformCommissionCents = Math.round(grossMonthlyRevenueCents * commissionRate);
     const estimatedTeacherEarningsCents = grossMonthlyRevenueCents - platformCommissionCents;
 
     // List of active subscribers
-    const subscribers = db.prepare(`
+    const subscribers = await db.prepare(`
       SELECT 
         s.id as subscription_id, s.started_at, s.renewal_at, s.status,
         u.id as student_id, u.name as student_name, u.avatar_url, u.email
@@ -46,7 +46,7 @@ router.get('/overview', requireRole('teacher'), (req, res) => {
     `).all(teacherId);
 
     // Simulated payments ledger for this teacher
-    const payments = db.prepare(`
+    const payments = await db.prepare(`
       SELECT 
         p.id, p.amount_cents, p.platform_commission_cents, p.teacher_earnings_cents, p.created_at, p.status, p.simulated,
         u.name as student_name, u.email as student_email
@@ -58,7 +58,7 @@ router.get('/overview', requireRole('teacher'), (req, res) => {
     `).all(teacherId);
 
     // Teacher courses and engagement
-    const courses = db.prepare(`
+    const courses = await db.prepare(`
       SELECT 
         c.*, 
         s.name as subject_name,
@@ -92,7 +92,11 @@ router.get('/overview', requireRole('teacher'), (req, res) => {
         platform_commission: (p.platform_commission_cents / 100).toFixed(2),
         teacher_earnings: (p.teacher_earnings_cents / 100).toFixed(2)
       })),
-      courses
+      courses: courses.map(c => ({
+        ...c,
+        total_lessons: Number(c.total_lessons || 0),
+        active_learners: Number(c.active_learners || 0)
+      }))
     });
   } catch (error) {
     console.error('Teacher overview error:', error);
@@ -101,7 +105,7 @@ router.get('/overview', requireRole('teacher'), (req, res) => {
 });
 
 // Update Teacher Subscription Price & Profile
-router.post('/settings', requireRole('teacher'), (req, res) => {
+router.post('/settings', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const { headline, bio, monthly_price_cents } = req.body;
@@ -110,7 +114,7 @@ router.post('/settings', requireRole('teacher'), (req, res) => {
       return res.status(400).json({ error: 'Price must be at least $1.00' });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE teacher_profiles 
       SET headline = COALESCE(?, headline),
           bio = COALESCE(?, bio),
@@ -126,12 +130,12 @@ router.post('/settings', requireRole('teacher'), (req, res) => {
 });
 
 // Get full course with sections and lessons for editing
-router.get('/courses/:id/full', requireRole('teacher'), (req, res) => {
+router.get('/courses/:id/full', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const courseId = parseInt(req.params.id);
 
-    const course = db.prepare(`
+    const course = await db.prepare(`
       SELECT c.*, s.name as subject_name 
       FROM courses c
       LEFT JOIN subjects s ON c.subject_id = s.id
@@ -142,10 +146,10 @@ router.get('/courses/:id/full', requireRole('teacher'), (req, res) => {
       return res.status(404).json({ error: 'Course not found or access denied' });
     }
 
-    const sections = db.prepare('SELECT * FROM sections WHERE course_id = ? ORDER BY order_index ASC').all(courseId);
+    const sections = await db.prepare('SELECT * FROM sections WHERE course_id = ? ORDER BY order_index ASC').all(courseId);
 
     for (const section of sections) {
-      section.lessons = db.prepare('SELECT * FROM lessons WHERE section_id = ? ORDER BY order_index ASC').all(section.id);
+      section.lessons = await db.prepare('SELECT * FROM lessons WHERE section_id = ? ORDER BY order_index ASC').all(section.id);
     }
 
     res.json({
@@ -159,7 +163,7 @@ router.get('/courses/:id/full', requireRole('teacher'), (req, res) => {
 });
 
 // Create new course
-router.post('/courses', requireRole('teacher'), (req, res) => {
+router.post('/courses', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const { title, description, subject_name, educational_level, thumbnail_url } = req.body;
@@ -169,9 +173,9 @@ router.post('/courses', requireRole('teacher'), (req, res) => {
     }
 
     // Find or get subject
-    let subject = db.prepare('SELECT id FROM subjects WHERE name = ?').get(subject_name || 'Mathematics');
+    let subject = await db.prepare('SELECT id FROM subjects WHERE name = ?').get(subject_name || 'Mathematics');
     if (!subject) {
-      subject = db.prepare('SELECT id FROM subjects LIMIT 1').get();
+      subject = await db.prepare('SELECT id FROM subjects LIMIT 1').get();
     }
 
     const insertCourse = db.prepare(`
@@ -179,7 +183,7 @@ router.post('/courses', requireRole('teacher'), (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, 1)
     `);
 
-    const result = insertCourse.run(
+    const result = await insertCourse.run(
       teacherId,
       subject.id,
       title,
@@ -191,7 +195,7 @@ router.post('/courses', requireRole('teacher'), (req, res) => {
     const courseId = result.lastInsertRowid;
 
     // Create a default first section
-    db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, ?)').run(courseId, 'Section 1: Introduction & Fundamentals', 1);
+    await db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, ?)').run(courseId, 'Section 1: Introduction & Fundamentals', 1);
 
     res.status(201).json({
       success: true,
@@ -205,24 +209,24 @@ router.post('/courses', requireRole('teacher'), (req, res) => {
 });
 
 // Update course
-router.put('/courses/:id', requireRole('teacher'), (req, res) => {
+router.put('/courses/:id', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const courseId = parseInt(req.params.id);
     const { title, description, educational_level, subject_name, thumbnail_url, is_published } = req.body;
 
-    const course = db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(courseId, teacherId);
+    const course = await db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(courseId, teacherId);
     if (!course) {
       return res.status(404).json({ error: 'Course not found or access denied' });
     }
 
     let subjectId = null;
     if (subject_name) {
-      const subj = db.prepare('SELECT id FROM subjects WHERE name = ?').get(subject_name);
+      const subj = await db.prepare('SELECT id FROM subjects WHERE name = ?').get(subject_name);
       if (subj) subjectId = subj.id;
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE courses
       SET title = COALESCE(?, title),
           description = COALESCE(?, description),
@@ -250,17 +254,17 @@ router.put('/courses/:id', requireRole('teacher'), (req, res) => {
 });
 
 // Delete course
-router.delete('/courses/:id', requireRole('teacher'), (req, res) => {
+router.delete('/courses/:id', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const courseId = parseInt(req.params.id);
 
-    const course = db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(courseId, teacherId);
+    const course = await db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(courseId, teacherId);
     if (!course) {
       return res.status(404).json({ error: 'Course not found or access denied' });
     }
 
-    db.prepare('DELETE FROM courses WHERE id = ? AND teacher_id = ?').run(courseId, teacherId);
+    await db.prepare('DELETE FROM courses WHERE id = ? AND teacher_id = ?').run(courseId, teacherId);
     res.json({ success: true, message: 'Course deleted successfully' });
   } catch (error) {
     console.error('Delete course error:', error);
@@ -269,7 +273,7 @@ router.delete('/courses/:id', requireRole('teacher'), (req, res) => {
 });
 
 // Add section to course
-router.post('/courses/:id/sections', requireRole('teacher'), (req, res) => {
+router.post('/courses/:id/sections', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const courseId = parseInt(req.params.id);
@@ -279,16 +283,16 @@ router.post('/courses/:id/sections', requireRole('teacher'), (req, res) => {
       return res.status(400).json({ error: 'Section title is required' });
     }
 
-    const course = db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(courseId, teacherId);
+    const course = await db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(courseId, teacherId);
     if (!course) {
       return res.status(404).json({ error: 'Course not found or access denied' });
     }
 
     // Next order index
-    const maxOrder = db.prepare('SELECT MAX(order_index) as max_order FROM sections WHERE course_id = ?').get(courseId);
-    const nextOrder = (maxOrder?.max_order || 0) + 1;
+    const maxOrder = await db.prepare('SELECT MAX(order_index) as max_order FROM sections WHERE course_id = ?').get(courseId);
+    const nextOrder = (Number(maxOrder?.max_order || 0)) + 1;
 
-    const result = db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, ?)').run(courseId, title, nextOrder);
+    const result = await db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, ?)').run(courseId, title, nextOrder);
 
     res.status(201).json({
       success: true,
@@ -304,13 +308,13 @@ router.post('/courses/:id/sections', requireRole('teacher'), (req, res) => {
 });
 
 // Update section
-router.put('/sections/:id', requireRole('teacher'), (req, res) => {
+router.put('/sections/:id', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const sectionId = parseInt(req.params.id);
     const { title, order_index } = req.body;
 
-    const section = db.prepare(`
+    const section = await db.prepare(`
       SELECT s.id 
       FROM sections s
       JOIN courses c ON s.course_id = c.id
@@ -321,7 +325,7 @@ router.put('/sections/:id', requireRole('teacher'), (req, res) => {
       return res.status(404).json({ error: 'Section not found or access denied' });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE sections
       SET title = COALESCE(?, title),
           order_index = COALESCE(?, order_index)
@@ -336,12 +340,12 @@ router.put('/sections/:id', requireRole('teacher'), (req, res) => {
 });
 
 // Delete section
-router.delete('/sections/:id', requireRole('teacher'), (req, res) => {
+router.delete('/sections/:id', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const sectionId = parseInt(req.params.id);
 
-    const section = db.prepare(`
+    const section = await db.prepare(`
       SELECT s.id 
       FROM sections s
       JOIN courses c ON s.course_id = c.id
@@ -352,7 +356,7 @@ router.delete('/sections/:id', requireRole('teacher'), (req, res) => {
       return res.status(404).json({ error: 'Section not found or access denied' });
     }
 
-    db.prepare('DELETE FROM sections WHERE id = ?').run(sectionId);
+    await db.prepare('DELETE FROM sections WHERE id = ?').run(sectionId);
     res.json({ success: true, message: 'Section deleted successfully' });
   } catch (error) {
     console.error('Delete section error:', error);
@@ -361,7 +365,7 @@ router.delete('/sections/:id', requireRole('teacher'), (req, res) => {
 });
 
 // Add lesson to course
-router.post('/lessons', requireRole('teacher'), (req, res) => {
+router.post('/lessons', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const { course_id, section_id, title, description, video_url, duration_minutes, access_level } = req.body;
@@ -371,7 +375,7 @@ router.post('/lessons', requireRole('teacher'), (req, res) => {
     }
 
     // Verify course belongs to this teacher
-    const course = db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(course_id, teacherId);
+    const course = await db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(course_id, teacherId);
     if (!course) {
       return res.status(403).json({ error: 'You do not own this course' });
     }
@@ -379,20 +383,25 @@ router.post('/lessons', requireRole('teacher'), (req, res) => {
     // Verify or find section
     let targetSectionId = section_id;
     if (!targetSectionId) {
-      const section = db.prepare('SELECT id FROM sections WHERE course_id = ? ORDER BY order_index ASC LIMIT 1').get(course_id);
-      targetSectionId = section ? section.id : db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, 1)').run(course_id, 'General Section').lastInsertRowid;
+      const section = await db.prepare('SELECT id FROM sections WHERE course_id = ? ORDER BY order_index ASC LIMIT 1').get(course_id);
+      if (section) {
+        targetSectionId = section.id;
+      } else {
+        const defaultSec = await db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, 1)').run(course_id, 'General Section');
+        targetSectionId = defaultSec.lastInsertRowid;
+      }
     }
 
     // Next order index
-    const maxOrder = db.prepare('SELECT MAX(order_index) as max_order FROM lessons WHERE section_id = ?').get(targetSectionId);
-    const nextOrder = (maxOrder?.max_order || 0) + 1;
+    const maxOrder = await db.prepare('SELECT MAX(order_index) as max_order FROM lessons WHERE section_id = ?').get(targetSectionId);
+    const nextOrder = (Number(maxOrder?.max_order || 0)) + 1;
 
     const insertLesson = db.prepare(`
       INSERT INTO lessons (section_id, course_id, teacher_id, title, description, video_url, duration_minutes, access_level, order_index, is_published)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `);
 
-    const result = insertLesson.run(
+    const result = await insertLesson.run(
       targetSectionId,
       course_id,
       teacherId,
@@ -416,18 +425,18 @@ router.post('/lessons', requireRole('teacher'), (req, res) => {
 });
 
 // Update lesson
-router.put('/lessons/:id', requireRole('teacher'), (req, res) => {
+router.put('/lessons/:id', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const lessonId = parseInt(req.params.id);
     const { title, description, video_url, duration_minutes, access_level, order_index, is_published } = req.body;
 
-    const lesson = db.prepare('SELECT id FROM lessons WHERE id = ? AND teacher_id = ?').get(lessonId, teacherId);
+    const lesson = await db.prepare('SELECT id FROM lessons WHERE id = ? AND teacher_id = ?').get(lessonId, teacherId);
     if (!lesson) {
       return res.status(404).json({ error: 'Lesson not found or access denied' });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE lessons
       SET title = COALESCE(?, title),
           description = COALESCE(?, description),
@@ -457,17 +466,17 @@ router.put('/lessons/:id', requireRole('teacher'), (req, res) => {
 });
 
 // Delete lesson
-router.delete('/lessons/:id', requireRole('teacher'), (req, res) => {
+router.delete('/lessons/:id', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const lessonId = parseInt(req.params.id);
 
-    const lesson = db.prepare('SELECT id FROM lessons WHERE id = ? AND teacher_id = ?').get(lessonId, teacherId);
+    const lesson = await db.prepare('SELECT id FROM lessons WHERE id = ? AND teacher_id = ?').get(lessonId, teacherId);
     if (!lesson) {
       return res.status(404).json({ error: 'Lesson not found or access denied' });
     }
 
-    db.prepare('DELETE FROM lessons WHERE id = ? AND teacher_id = ?').run(lessonId, teacherId);
+    await db.prepare('DELETE FROM lessons WHERE id = ? AND teacher_id = ?').run(lessonId, teacherId);
     res.json({ success: true, message: 'Lesson deleted successfully' });
   } catch (error) {
     console.error('Delete lesson error:', error);
@@ -476,7 +485,7 @@ router.delete('/lessons/:id', requireRole('teacher'), (req, res) => {
 });
 
 // Reorder sections or lessons
-router.post('/reorder', requireRole('teacher'), (req, res) => {
+router.post('/reorder', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const { type, items } = req.body; // items: [{ id, order_index }]
@@ -492,7 +501,7 @@ router.post('/reorder', requireRole('teacher'), (req, res) => {
         WHERE id = ? AND course_id IN (SELECT id FROM courses WHERE teacher_id = ?)
       `);
       for (const item of items) {
-        updateSection.run(item.order_index, item.id, teacherId);
+        await updateSection.run(item.order_index, item.id, teacherId);
       }
     } else if (type === 'lessons') {
       const updateLesson = db.prepare(`
@@ -501,7 +510,7 @@ router.post('/reorder', requireRole('teacher'), (req, res) => {
         WHERE id = ? AND teacher_id = ?
       `);
       for (const item of items) {
-        updateLesson.run(item.order_index, item.id, teacherId);
+        await updateLesson.run(item.order_index, item.id, teacherId);
       }
     }
 

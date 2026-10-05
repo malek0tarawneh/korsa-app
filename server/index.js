@@ -57,7 +57,7 @@ app.get('{*path}', (req, res) => {
 // Initialize & Seed Database, then Start Server
 async function startServer() {
   try {
-    initDatabase();
+    await initDatabase();
     await seedDatabase();
 
     app.listen(PORT, () => {

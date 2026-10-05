@@ -2,9 +2,10 @@ import { db, initDatabase } from './db.js';
 import { hashPassword } from './auth.js';
 
 export async function seedDatabase() {
-  initDatabase();
+  await initDatabase();
 
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+  const countRow = await db.prepare('SELECT COUNT(*) as count FROM users').get();
+  const userCount = countRow ? Number(countRow.count) : 0;
   if (userCount > 0) {
     console.log('Database already seeded.');
     return;
@@ -26,13 +27,13 @@ export async function seedDatabase() {
 
   const subjectMap = {};
   for (const s of subjectsData) {
-    const res = insertSubject.run(s.name, s.slug, s.description, s.icon);
+    const res = await insertSubject.run(s.name, s.slug, s.description, s.icon);
     subjectMap[s.slug] = res.lastInsertRowid;
   }
 
   // 2. Insert Admin User
   const insertUser = db.prepare('INSERT INTO users (email, password_hash, role, name, avatar_url) VALUES (?, ?, ?, ?, ?)');
-  const adminRes = insertUser.run('admin@learnly.com', defaultPasswordHash, 'admin', 'System Administrator', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80');
+  await insertUser.run('admin@learnly.com', defaultPasswordHash, 'admin', 'System Administrator', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80');
 
   // 3. Insert Teachers
   const insertTeacherProfile = db.prepare(`
@@ -111,10 +112,10 @@ export async function seedDatabase() {
 
   const teacherIds = [];
   for (const t of teachersData) {
-    const uRes = insertUser.run(t.email, defaultPasswordHash, 'teacher', t.name, t.avatar);
+    const uRes = await insertUser.run(t.email, defaultPasswordHash, 'teacher', t.name, t.avatar);
     const userId = uRes.lastInsertRowid;
     teacherIds.push({ userId, name: t.name, subjectSlug: t.subjects.includes('Mathematics') ? 'mathematics' : t.subjects.includes('Physics') ? 'physics' : t.subjects.includes('Chemistry') ? 'chemistry' : t.subjects.includes('English') ? 'english' : 'computer-science', price: t.monthly_price_cents });
-    insertTeacherProfile.run(
+    await insertTeacherProfile.run(
       userId,
       t.headline,
       t.bio,
@@ -149,9 +150,9 @@ export async function seedDatabase() {
 
   const studentIds = [];
   for (const s of studentsData) {
-    const sRes = insertUser.run(s.email, defaultPasswordHash, 'student', s.name, s.avatar);
+    const sRes = await insertUser.run(s.email, defaultPasswordHash, 'student', s.name, s.avatar);
     studentIds.push(sRes.lastInsertRowid);
-    insertStudentProfile.run(sRes.lastInsertRowid, s.educational_level, s.bio);
+    await insertStudentProfile.run(sRes.lastInsertRowid, s.educational_level, s.bio);
   }
 
   // 5. Insert Courses, Sections & Lessons
@@ -171,7 +172,7 @@ export async function seedDatabase() {
 
   // Course 1: Mathematics - Jordan Reed
   const mathTeacher = teacherIds.find(t => t.name.includes('Jordan'));
-  const mathCourseRes = insertCourse.run(
+  const mathCourseRes = await insertCourse.run(
     mathTeacher.userId,
     subjectMap['mathematics'],
     'Mastering Grade 12 Calculus & Differential Equations',
@@ -181,25 +182,28 @@ export async function seedDatabase() {
   );
   const mathCourseId = mathCourseRes.lastInsertRowid;
 
-  const mSec1 = insertSection.run(mathCourseId, 'Foundations of Differential Calculus', 1).lastInsertRowid;
-  const mSec2 = insertSection.run(mathCourseId, 'Applications of Derivatives', 2).lastInsertRowid;
+  const mSec1Res = await insertSection.run(mathCourseId, 'Foundations of Differential Calculus', 1);
+  const mSec1 = mSec1Res.lastInsertRowid;
+  const mSec2Res = await insertSection.run(mathCourseId, 'Applications of Derivatives', 2);
+  const mSec2 = mSec2Res.lastInsertRowid;
 
   // Lesson 1 - FREE SAMPLE
-  const l1 = insertLesson.run(
+  const l1Res = await insertLesson.run(
     mSec1, mathCourseId, mathTeacher.userId,
     'Introduction to Derivatives: Geometric Intuition & Secant Lines',
     'Explore the transition from average rates of change to instantaneous rates of change. Understand the slope of a curve visually without memorizing dry formulas.',
-    'https://www.youtube.com/embed/9vKqVkMQHKk', // 3Blue1Brown essence of calculus
+    'https://www.youtube.com/embed/9vKqVkMQHKk',
     18,
     'FREE',
     1
-  ).lastInsertRowid;
+  );
+  const l1 = l1Res.lastInsertRowid;
 
-  insertResource.run(l1, 'Lecture Notes: Limits & Tangent Lines (PDF)', 'https://example.com/math-notes-01.pdf', 'PDF', 'FREE');
-  insertResource.run(l1, 'Practice Problem Set 1 (Derivatives)', 'https://example.com/math-problems-01.pdf', 'PDF', 'FREE');
+  await insertResource.run(l1, 'Lecture Notes: Limits & Tangent Lines (PDF)', 'https://example.com/math-notes-01.pdf', 'PDF', 'FREE');
+  await insertResource.run(l1, 'Practice Problem Set 1 (Derivatives)', 'https://example.com/math-problems-01.pdf', 'PDF', 'FREE');
 
   // Lesson 2 - SUBSCRIBER ONLY
-  const l2 = insertLesson.run(
+  const l2Res = await insertLesson.run(
     mSec1, mathCourseId, mathTeacher.userId,
     'The Power Rule & Trigonometric Derivatives Deep Dive',
     'Rigorous proof and application of the power rule, product rule, quotient rule, and trigonometric function derivatives with 8 walkthrough exam problems.',
@@ -207,11 +211,12 @@ export async function seedDatabase() {
     24,
     'SUBSCRIBER_ONLY',
     2
-  ).lastInsertRowid;
-  insertResource.run(l2, 'Formula Sheet: Derivative Rules & Tricks', 'https://example.com/formula-sheet.pdf', 'PDF', 'SUBSCRIBER_ONLY');
+  );
+  const l2 = l2Res.lastInsertRowid;
+  await insertResource.run(l2, 'Formula Sheet: Derivative Rules & Tricks', 'https://example.com/formula-sheet.pdf', 'PDF', 'SUBSCRIBER_ONLY');
 
   // Lesson 3 - SUBSCRIBER ONLY
-  insertLesson.run(
+  await insertLesson.run(
     mSec2, mathCourseId, mathTeacher.userId,
     'Optimization Problems & Extrema on Closed Intervals',
     'Step-by-step strategy for translating word problems into objective functions, finding critical numbers, and proving absolute maximums/minimums.',
@@ -223,7 +228,7 @@ export async function seedDatabase() {
 
   // Course 2: Physics - Elena Rostova
   const physTeacher = teacherIds.find(t => t.name.includes('Elena'));
-  const physCourseRes = insertCourse.run(
+  const physCourseRes = await insertCourse.run(
     physTeacher.userId,
     subjectMap['physics'],
     'Classical Mechanics & Newton’s Laws in Depth',
@@ -232,9 +237,10 @@ export async function seedDatabase() {
     'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&auto=format&fit=crop&q=80'
   );
   const physCourseId = physCourseRes.lastInsertRowid;
-  const pSec1 = insertSection.run(physCourseId, 'Kinematics & Coordinate Frames', 1).lastInsertRowid;
+  const pSec1Res = await insertSection.run(physCourseId, 'Kinematics & Coordinate Frames', 1);
+  const pSec1 = pSec1Res.lastInsertRowid;
 
-  const pl1 = insertLesson.run(
+  const pl1Res = await insertLesson.run(
     pSec1, physCourseId, physTeacher.userId,
     'Free-Body Diagrams and Normal Force Myths (Free Sample)',
     'Common traps students fall into when resolving components of weight on inclined planes and how to draw bulletproof free-body diagrams.',
@@ -242,10 +248,11 @@ export async function seedDatabase() {
     20,
     'FREE',
     1
-  ).lastInsertRowid;
-  insertResource.run(pl1, 'Guide: Drawing Free-Body Diagrams with Precision', 'https://example.com/physics-fbd.pdf', 'PDF', 'FREE');
+  );
+  const pl1 = pl1Res.lastInsertRowid;
+  await insertResource.run(pl1, 'Guide: Drawing Free-Body Diagrams with Precision', 'https://example.com/physics-fbd.pdf', 'PDF', 'FREE');
 
-  insertLesson.run(
+  await insertLesson.run(
     pSec1, physCourseId, physTeacher.userId,
     'Connected Bodies, Pulleys, and Tension Systems (Subscriber Only)',
     'Solving multi-mass pulley systems and friction transitions using unified system equations.',
@@ -257,7 +264,7 @@ export async function seedDatabase() {
 
   // Course 3: Computer Science - Tariq Al-Mansoor
   const csTeacher = teacherIds.find(t => t.name.includes('Tariq'));
-  const csCourseRes = insertCourse.run(
+  const csCourseRes = await insertCourse.run(
     csTeacher.userId,
     subjectMap['computer-science'],
     'Foundational Algorithms & Data Structures in Python',
@@ -266,9 +273,10 @@ export async function seedDatabase() {
     'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80'
   );
   const csCourseId = csCourseRes.lastInsertRowid;
-  const csSec1 = insertSection.run(csCourseId, 'Computational Complexity & Basic Structures', 1).lastInsertRowid;
+  const csSec1Res = await insertSection.run(csCourseId, 'Computational Complexity & Basic Structures', 1);
+  const csSec1 = csSec1Res.lastInsertRowid;
 
-  const csl1 = insertLesson.run(
+  const csl1Res = await insertLesson.run(
     csSec1, csCourseId, csTeacher.userId,
     'Demystifying Big-O Time & Space Complexity (Free Sample)',
     'Learn how to measure algorithm performance without relying on machine clock speed. Understand O(1), O(log n), O(n), and O(n^2) with concrete visual benchmarks.',
@@ -276,10 +284,11 @@ export async function seedDatabase() {
     22,
     'FREE',
     1
-  ).lastInsertRowid;
-  insertResource.run(csl1, 'Cheatsheet: Big-O Asymptotic Notations', 'https://example.com/big-o-cheatsheet.pdf', 'PDF', 'FREE');
+  );
+  const csl1 = csl1Res.lastInsertRowid;
+  await insertResource.run(csl1, 'Cheatsheet: Big-O Asymptotic Notations', 'https://example.com/big-o-cheatsheet.pdf', 'PDF', 'FREE');
 
-  insertLesson.run(
+  await insertLesson.run(
     csSec1, csCourseId, csTeacher.userId,
     'Binary Search & Two-Pointer Strategies (Subscriber Only)',
     'Deep dive into divide-and-conquer principles and why binary search is one of the most powerful algorithms in computer science.',
@@ -291,40 +300,44 @@ export async function seedDatabase() {
 
   // 6. Insert Simulated Subscription for Sample Student
   // Student 1 (Adam Miller) is subscribed to Dr. Jordan Reed
+  const subStarted = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+  const subRenewal = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
   const insertSub = db.prepare(`
     INSERT INTO subscriptions (student_id, teacher_id, price_cents, status, started_at, renewal_at)
-    VALUES (?, ?, ?, 'active', datetime('now', '-15 days'), datetime('now', '+15 days'))
+    VALUES (?, ?, ?, 'active', ?, ?)
   `);
-  const subRes = insertSub.run(studentIds[0], mathTeacher.userId, mathTeacher.price);
+  const subRes = await insertSub.run(studentIds[0], mathTeacher.userId, mathTeacher.price, subStarted, subRenewal);
 
   // Record simulated payment: $5 total, 20% platform ($1), $4 teacher
   const insertPayment = db.prepare(`
     INSERT INTO payments (subscription_id, student_id, teacher_id, amount_cents, platform_commission_cents, teacher_earnings_cents, status, simulated)
     VALUES (?, ?, ?, ?, ?, ?, 'completed', 1)
   `);
-  insertPayment.run(subRes.lastInsertRowid, studentIds[0], mathTeacher.userId, 500, 100, 400);
+  await insertPayment.run(subRes.lastInsertRowid, studentIds[0], mathTeacher.userId, 500, 100, 400);
 
   // 7. Insert Learning Progress for Adam
+  const nowIso = new Date().toISOString();
   const insertProgress = db.prepare(`
     INSERT INTO progress (student_id, course_id, lesson_id, completed, last_watched_at)
-    VALUES (?, ?, ?, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, ?)
   `);
   // Completed lesson 1, started lesson 2
-  insertProgress.run(studentIds[0], mathCourseId, l1, 1);
-  insertProgress.run(studentIds[0], mathCourseId, l2, 0);
+  await insertProgress.run(studentIds[0], mathCourseId, l1, 1, nowIso);
+  await insertProgress.run(studentIds[0], mathCourseId, l2, 0, nowIso);
 
   // 8. Insert Reviews
   const insertReview = db.prepare(`
     INSERT INTO reviews (student_id, teacher_id, rating, comment)
     VALUES (?, ?, ?, ?)
   `);
-  insertReview.run(
+  await insertReview.run(
     studentIds[0],
     mathTeacher.userId,
     5,
     'Dr. Reed is easily the best math teacher I have ever had. The way he explained derivatives cleared up months of confusion in under an hour.'
   );
-  insertReview.run(
+  await insertReview.run(
     studentIds[1],
     physTeacher.userId,
     5,

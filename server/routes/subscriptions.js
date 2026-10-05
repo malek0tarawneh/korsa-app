@@ -5,14 +5,14 @@ import { requireAuth } from '../auth.js';
 const router = express.Router();
 
 // Helper: Get configurable platform commission percentage
-function getPlatformCommissionRate() {
-  const row = db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_commission_percentage');
+async function getPlatformCommissionRate() {
+  const row = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_commission_percentage');
   const percent = row ? parseFloat(row.value) : 20;
   return isNaN(percent) ? 0.20 : percent / 100;
 }
 
 // SIMULATE PAYMENT & SUBSCRIBE
-router.post('/simulate', requireAuth, (req, res) => {
+router.post('/simulate', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
     const { teacher_id } = req.body;
@@ -26,7 +26,7 @@ router.post('/simulate', requireAuth, (req, res) => {
     }
 
     // Verify teacher exists and get price
-    const teacherProfile = db.prepare(`
+    const teacherProfile = await db.prepare(`
       SELECT tp.monthly_price_cents, u.name as teacher_name 
       FROM teacher_profiles tp 
       JOIN users u ON tp.user_id = u.id 
@@ -38,17 +38,16 @@ router.post('/simulate', requireAuth, (req, res) => {
     }
 
     const priceCents = teacherProfile.monthly_price_cents;
-    const commissionRate = getPlatformCommissionRate();
+    const commissionRate = await getPlatformCommissionRate();
     const platformCommissionCents = Math.round(priceCents * commissionRate);
     const teacherEarningsCents = priceCents - platformCommissionCents;
 
     // Check if subscription already exists
-    const existing = db.prepare('SELECT * FROM subscriptions WHERE student_id = ? AND teacher_id = ?').get(studentId, teacher_id);
+    const existing = await db.prepare('SELECT * FROM subscriptions WHERE student_id = ? AND teacher_id = ?').get(studentId, teacher_id);
 
     let subscriptionId;
-    const now = new Date();
-    const renewal = new Date();
-    renewal.setMonth(renewal.getMonth() + 1);
+    const nowIso = new Date().toISOString();
+    const renewalIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
     if (existing) {
       if (existing.status === 'active') {
@@ -56,19 +55,19 @@ router.post('/simulate', requireAuth, (req, res) => {
       }
 
       // Reactivate cancelled or expired subscription
-      db.prepare(`
+      await db.prepare(`
         UPDATE subscriptions 
-        SET status = 'active', price_cents = ?, started_at = datetime('now'), renewal_at = datetime('now', '+30 days'), cancelled_at = NULL 
+        SET status = 'active', price_cents = ?, started_at = ?, renewal_at = ?, cancelled_at = NULL 
         WHERE id = ?
-      `).run(priceCents, existing.id);
+      `).run(priceCents, nowIso, renewalIso, existing.id);
       subscriptionId = existing.id;
     } else {
       // Create new subscription
       const insertSub = db.prepare(`
         INSERT INTO subscriptions (student_id, teacher_id, price_cents, status, started_at, renewal_at)
-        VALUES (?, ?, ?, 'active', datetime('now'), datetime('now', '+30 days'))
+        VALUES (?, ?, ?, 'active', ?, ?)
       `);
-      const subResult = insertSub.run(studentId, teacher_id, priceCents);
+      const subResult = await insertSub.run(studentId, teacher_id, priceCents, nowIso, renewalIso);
       subscriptionId = subResult.lastInsertRowid;
     }
 
@@ -78,11 +77,12 @@ router.post('/simulate', requireAuth, (req, res) => {
       (subscription_id, student_id, teacher_id, amount_cents, platform_commission_cents, teacher_earnings_cents, status, simulated)
       VALUES (?, ?, ?, ?, ?, ?, 'completed', 1)
     `);
-    insertPayment.run(subscriptionId, studentId, teacher_id, priceCents, platformCommissionCents, teacherEarningsCents);
+    await insertPayment.run(subscriptionId, studentId, teacher_id, priceCents, platformCommissionCents, teacherEarningsCents);
 
     // Update teacher's subscriber count
-    const countRow = db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(teacher_id);
-    db.prepare('UPDATE teacher_profiles SET subscriber_count = ? WHERE user_id = ?').run(countRow.count, teacher_id);
+    const countRow = await db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(teacher_id);
+    const activeSubCount = Number(countRow?.count || 0);
+    await db.prepare('UPDATE teacher_profiles SET subscriber_count = ? WHERE user_id = ?').run(activeSubCount, teacher_id);
 
     res.json({
       success: true,
@@ -105,11 +105,11 @@ router.post('/simulate', requireAuth, (req, res) => {
 });
 
 // GET Student active & past subscriptions
-router.get('/my', requireAuth, (req, res) => {
+router.get('/my', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    const subscriptions = db.prepare(`
+    const subscriptions = await db.prepare(`
       SELECT 
         s.id, s.teacher_id, s.price_cents, s.status, s.started_at, s.renewal_at, s.cancelled_at,
         u.name as teacher_name, u.avatar_url as teacher_avatar,
@@ -135,12 +135,12 @@ router.get('/my', requireAuth, (req, res) => {
 });
 
 // CANCEL SUBSCRIPTION
-router.post('/cancel/:id', requireAuth, (req, res) => {
+router.post('/cancel/:id', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
     const subscriptionId = parseInt(req.params.id);
 
-    const sub = db.prepare('SELECT * FROM subscriptions WHERE id = ? AND student_id = ?').get(subscriptionId, studentId);
+    const sub = await db.prepare('SELECT * FROM subscriptions WHERE id = ? AND student_id = ?').get(subscriptionId, studentId);
     if (!sub) {
       return res.status(404).json({ error: 'Subscription not found' });
     }
@@ -149,15 +149,17 @@ router.post('/cancel/:id', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Subscription is not currently active' });
     }
 
-    db.prepare(`
+    const nowIso = new Date().toISOString();
+    await db.prepare(`
       UPDATE subscriptions 
-      SET status = 'cancelled', cancelled_at = datetime('now')
+      SET status = 'cancelled', cancelled_at = ?
       WHERE id = ?
-    `).run(subscriptionId);
+    `).run(nowIso, subscriptionId);
 
     // Update teacher subscriber count
-    const countRow = db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(sub.teacher_id);
-    db.prepare('UPDATE teacher_profiles SET subscriber_count = ? WHERE user_id = ?').run(countRow.count, sub.teacher_id);
+    const countRow = await db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(sub.teacher_id);
+    const activeSubCount = Number(countRow?.count || 0);
+    await db.prepare('UPDATE teacher_profiles SET subscriber_count = ? WHERE user_id = ?').run(activeSubCount, sub.teacher_id);
 
     res.json({
       success: true,
@@ -170,12 +172,12 @@ router.post('/cancel/:id', requireAuth, (req, res) => {
 });
 
 // REACTIVATE SUBSCRIPTION
-router.post('/reactivate/:id', requireAuth, (req, res) => {
+router.post('/reactivate/:id', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
     const subscriptionId = parseInt(req.params.id);
 
-    const sub = db.prepare('SELECT * FROM subscriptions WHERE id = ? AND student_id = ?').get(subscriptionId, studentId);
+    const sub = await db.prepare('SELECT * FROM subscriptions WHERE id = ? AND student_id = ?').get(subscriptionId, studentId);
     if (!sub) {
       return res.status(404).json({ error: 'Subscription not found' });
     }
@@ -184,26 +186,28 @@ router.post('/reactivate/:id', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Subscription is already active' });
     }
 
-    db.prepare(`
+    const renewalIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await db.prepare(`
       UPDATE subscriptions 
-      SET status = 'active', renewal_at = datetime('now', '+30 days'), cancelled_at = NULL 
+      SET status = 'active', renewal_at = ?, cancelled_at = NULL 
       WHERE id = ?
-    `).run(subscriptionId);
+    `).run(renewalIso, subscriptionId);
 
     // Record new simulated renewal payment
-    const commissionRate = getPlatformCommissionRate();
+    const commissionRate = await getPlatformCommissionRate();
     const platformCommissionCents = Math.round(sub.price_cents * commissionRate);
     const teacherEarningsCents = sub.price_cents - platformCommissionCents;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO payments 
       (subscription_id, student_id, teacher_id, amount_cents, platform_commission_cents, teacher_earnings_cents, status, simulated)
       VALUES (?, ?, ?, ?, ?, ?, 'completed', 1)
     `).run(subscriptionId, studentId, sub.teacher_id, sub.price_cents, platformCommissionCents, teacherEarningsCents);
 
     // Update teacher subscriber count
-    const countRow = db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(sub.teacher_id);
-    db.prepare('UPDATE teacher_profiles SET subscriber_count = ? WHERE user_id = ?').run(countRow.count, sub.teacher_id);
+    const countRow = await db.prepare(`SELECT COUNT(*) as count FROM subscriptions WHERE teacher_id = ? AND status = 'active'`).get(sub.teacher_id);
+    const activeSubCount = Number(countRow?.count || 0);
+    await db.prepare('UPDATE teacher_profiles SET subscriber_count = ? WHERE user_id = ?').run(activeSubCount, sub.teacher_id);
 
     res.json({
       success: true,
@@ -216,11 +220,11 @@ router.post('/reactivate/:id', requireAuth, (req, res) => {
 });
 
 // GET Student simulated invoices & payment history
-router.get('/my/ledger', requireAuth, (req, res) => {
+router.get('/my/ledger', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    const payments = db.prepare(`
+    const payments = await db.prepare(`
       SELECT 
         p.id, p.subscription_id, p.amount_cents, p.status, p.simulated, p.created_at,
         u.name as teacher_name, u.avatar_url as teacher_avatar

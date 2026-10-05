@@ -5,31 +5,31 @@ import { requireAuth, requireRole } from '../auth.js';
 const router = express.Router();
 
 // Helper: Recompute teacher rating
-function updateTeacherRating(teacherId) {
-  const stats = db.prepare(`
+async function updateTeacherRating(teacherId) {
+  const stats = await db.prepare(`
     SELECT AVG(rating) as avg_rating, COUNT(*) as count 
     FROM reviews 
     WHERE teacher_id = ? AND is_moderated = 0
   `).get(teacherId);
 
-  const avgRating = stats.avg_rating ? Math.round(stats.avg_rating * 10) / 10 : 5.0;
-  const reviewCount = stats.count || 0;
+  const avgRating = stats?.avg_rating ? Math.round(Number(stats.avg_rating) * 10) / 10 : 5.0;
+  const reviewCount = Number(stats?.count || 0);
 
-  db.prepare('UPDATE teacher_profiles SET rating = ?, review_count = ? WHERE user_id = ?').run(avgRating, reviewCount, teacherId);
+  await db.prepare('UPDATE teacher_profiles SET rating = ?, review_count = ? WHERE user_id = ?').run(avgRating, reviewCount, teacherId);
   return { avgRating, reviewCount };
 }
 
 // Check review eligibility for logged-in student
-router.get('/eligibility/:teacherId', requireAuth, (req, res) => {
+router.get('/eligibility/:teacherId', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
     const teacherId = parseInt(req.params.teacherId);
 
     // Check if subscribed
-    const sub = db.prepare('SELECT id, status FROM subscriptions WHERE student_id = ? AND teacher_id = ?').get(studentId, teacherId);
+    const sub = await db.prepare('SELECT id, status FROM subscriptions WHERE student_id = ? AND teacher_id = ?').get(studentId, teacherId);
     
     // Check existing review
-    const existingReview = db.prepare('SELECT * FROM reviews WHERE student_id = ? AND teacher_id = ?').get(studentId, teacherId);
+    const existingReview = await db.prepare('SELECT * FROM reviews WHERE student_id = ? AND teacher_id = ?').get(studentId, teacherId);
 
     res.json({
       can_review: Boolean(sub),
@@ -43,7 +43,7 @@ router.get('/eligibility/:teacherId', requireAuth, (req, res) => {
 });
 
 // Post or update a review
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
     const { teacher_id, rating, comment } = req.body;
@@ -57,7 +57,7 @@ router.post('/', requireAuth, (req, res) => {
     }
 
     // Verify subscription eligibility (Requirement: subscribed students)
-    const sub = db.prepare('SELECT id FROM subscriptions WHERE student_id = ? AND teacher_id = ?').get(studentId, teacher_id);
+    const sub = await db.prepare('SELECT id FROM subscriptions WHERE student_id = ? AND teacher_id = ?').get(studentId, teacher_id);
     if (!sub && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only subscribed students can review this teacher' });
     }
@@ -67,24 +67,25 @@ router.post('/', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Rating must be between 1 and 5 stars' });
     }
 
-    const existing = db.prepare('SELECT id FROM reviews WHERE student_id = ? AND teacher_id = ?').get(studentId, teacher_id);
+    const existing = await db.prepare('SELECT id FROM reviews WHERE student_id = ? AND teacher_id = ?').get(studentId, teacher_id);
+    const nowIso = new Date().toISOString();
 
     if (existing) {
       // Update existing review (prevent duplicates)
-      db.prepare(`
+      await db.prepare(`
         UPDATE reviews 
-        SET rating = ?, comment = ?, created_at = datetime('now') 
+        SET rating = ?, comment = ?, created_at = ? 
         WHERE id = ?
-      `).run(numRating, comment || '', existing.id);
+      `).run(numRating, comment || '', nowIso, existing.id);
     } else {
       // Insert new review
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO reviews (student_id, teacher_id, rating, comment, is_moderated)
         VALUES (?, ?, ?, ?, 0)
       `).run(studentId, teacher_id, numRating, comment || '');
     }
 
-    const { avgRating, reviewCount } = updateTeacherRating(teacher_id);
+    const { avgRating, reviewCount } = await updateTeacherRating(teacher_id);
 
     res.json({
       success: true,
@@ -99,9 +100,9 @@ router.post('/', requireAuth, (req, res) => {
 });
 
 // ADMIN: Get all reviews for moderation
-router.get('/admin', requireRole('admin'), (req, res) => {
+router.get('/admin', requireRole('admin'), async (req, res) => {
   try {
-    const reviews = db.prepare(`
+    const reviews = await db.prepare(`
       SELECT 
         r.id, r.student_id, r.teacher_id, r.rating, r.comment, r.is_moderated, r.created_at,
         s.name as student_name, s.email as student_email,
@@ -120,20 +121,20 @@ router.get('/admin', requireRole('admin'), (req, res) => {
 });
 
 // ADMIN: Toggle review moderation (hide/show)
-router.post('/admin/:id/toggle-moderation', requireRole('admin'), (req, res) => {
+router.post('/admin/:id/toggle-moderation', requireRole('admin'), async (req, res) => {
   try {
     const reviewId = parseInt(req.params.id);
-    const review = db.prepare('SELECT * FROM reviews WHERE id = ?').get(reviewId);
+    const review = await db.prepare('SELECT * FROM reviews WHERE id = ?').get(reviewId);
 
     if (!review) {
       return res.status(404).json({ error: 'Review not found' });
     }
 
     const newModeratedState = review.is_moderated === 1 ? 0 : 1;
-    db.prepare('UPDATE reviews SET is_moderated = ? WHERE id = ?').run(newModeratedState, reviewId);
+    await db.prepare('UPDATE reviews SET is_moderated = ? WHERE id = ?').run(newModeratedState, reviewId);
 
     // Recalculate teacher rating
-    updateTeacherRating(review.teacher_id);
+    await updateTeacherRating(review.teacher_id);
 
     res.json({
       success: true,
@@ -147,17 +148,17 @@ router.post('/admin/:id/toggle-moderation', requireRole('admin'), (req, res) => 
 });
 
 // ADMIN: Delete review
-router.delete('/admin/:id', requireRole('admin'), (req, res) => {
+router.delete('/admin/:id', requireRole('admin'), async (req, res) => {
   try {
     const reviewId = parseInt(req.params.id);
-    const review = db.prepare('SELECT teacher_id FROM reviews WHERE id = ?').get(reviewId);
+    const review = await db.prepare('SELECT teacher_id FROM reviews WHERE id = ?').get(reviewId);
 
     if (!review) {
       return res.status(404).json({ error: 'Review not found' });
     }
 
-    db.prepare('DELETE FROM reviews WHERE id = ?').run(reviewId);
-    updateTeacherRating(review.teacher_id);
+    await db.prepare('DELETE FROM reviews WHERE id = ?').run(reviewId);
+    await updateTeacherRating(review.teacher_id);
 
     res.json({ success: true, message: 'Review deleted successfully' });
   } catch (error) {

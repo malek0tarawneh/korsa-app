@@ -5,12 +5,12 @@ import { requireAuth } from '../auth.js';
 const router = express.Router();
 
 // Get student learning progress and "continue learning"
-router.get('/my', requireAuth, (req, res) => {
+router.get('/my', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
 
     // Get courses that student has progress in or is subscribed to
-    const courses = db.prepare(`
+    const courses = await db.prepare(`
       SELECT DISTINCT 
         c.id as course_id, c.teacher_id, c.title as course_title, c.thumbnail_url, c.educational_level,
         u.name as teacher_name, u.avatar_url as teacher_avatar,
@@ -25,9 +25,13 @@ router.get('/my', requireAuth, (req, res) => {
     `).all(studentId, studentId, studentId, studentId);
 
     const formatted = courses.map(c => {
-      const percentage = c.total_lessons > 0 ? Math.round((c.completed_lessons / c.total_lessons) * 100) : 0;
+      const totalLessons = Number(c.total_lessons || 0);
+      const completedLessons = Number(c.completed_lessons || 0);
+      const percentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
       return {
         ...c,
+        total_lessons: totalLessons,
+        completed_lessons: completedLessons,
         percentage
       };
     });
@@ -40,12 +44,12 @@ router.get('/my', requireAuth, (req, res) => {
 });
 
 // Get detailed progress for a specific course
-router.get('/course/:courseId', requireAuth, (req, res) => {
+router.get('/course/:courseId', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
     const courseId = parseInt(req.params.courseId);
 
-    const lessonProgress = db.prepare(`
+    const lessonProgress = await db.prepare(`
       SELECT lesson_id, completed, last_watched_at 
       FROM progress 
       WHERE student_id = ? AND course_id = ?
@@ -64,7 +68,7 @@ router.get('/course/:courseId', requireAuth, (req, res) => {
 });
 
 // Toggle lesson completed status
-router.post('/toggle', requireAuth, (req, res) => {
+router.post('/toggle', requireAuth, async (req, res) => {
   try {
     const studentId = req.user.id;
     const { lesson_id, course_id, completed } = req.body;
@@ -74,20 +78,21 @@ router.post('/toggle', requireAuth, (req, res) => {
     }
 
     const isCompleted = completed ? 1 : 0;
+    const nowIso = new Date().toISOString();
 
-    const existing = db.prepare('SELECT id FROM progress WHERE student_id = ? AND lesson_id = ?').get(studentId, lesson_id);
+    const existing = await db.prepare('SELECT id FROM progress WHERE student_id = ? AND lesson_id = ?').get(studentId, lesson_id);
 
     if (existing) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE progress 
-        SET completed = ?, last_watched_at = datetime('now') 
+        SET completed = ?, last_watched_at = ? 
         WHERE id = ?
-      `).run(isCompleted, existing.id);
+      `).run(isCompleted, nowIso, existing.id);
     } else {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO progress (student_id, course_id, lesson_id, completed, last_watched_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
-      `).run(studentId, course_id, lesson_id, isCompleted);
+        VALUES (?, ?, ?, ?, ?)
+      `).run(studentId, course_id, lesson_id, isCompleted, nowIso);
     }
 
     res.json({ success: true, completed: Boolean(isCompleted) });
