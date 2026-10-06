@@ -5,10 +5,81 @@ import { requireRole } from '../auth.js';
 const router = express.Router();
 
 // Helper: platform commission percentage
-async function getPlatformCommissionRate() {
+async function getPlatformCommissionRate(profile) {
+  if (profile && profile.commission_rate !== undefined && profile.commission_rate !== null) {
+    return Number(profile.commission_rate);
+  }
   const row = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_commission_percentage');
-  const percent = row ? parseFloat(row.value) : 20;
-  return isNaN(percent) ? 0.20 : percent / 100;
+  const percent = row ? parseFloat(row.value) : 10;
+  return isNaN(percent) ? 0.10 : percent / 100;
+}
+
+// Helper: generate RFC-4180 CSV for teacher audience
+export async function generateAudienceCsvData(teacherId) {
+  // 1. Subscribers
+  const subscribers = await db.prepare(`
+    SELECT u.name, u.email, s.started_at as acquired_at, s.status, 'Subscriber' as relationship,
+           (s.price_cents / 100.0) as estimated_val
+    FROM subscriptions s
+    JOIN users u ON s.student_id = u.id
+    WHERE s.teacher_id = ?
+  `).all(teacherId);
+
+  // 2. Lead magnet downloaders
+  const leadClaims = await db.prepare(`
+    SELECT student_name as name, student_email as email, claimed_at as acquired_at, 'Active Lead' as status, 'Lead Magnet' as relationship, 0 as estimated_val
+    FROM lead_magnet_claims
+    WHERE teacher_id = ?
+  `).all(teacherId);
+
+  // 3. Service clients
+  const serviceClients = await db.prepare(`
+    SELECT student_name as name, student_email as email, created_at as acquired_at, status, 'Micro-Service' as relationship,
+           (price_cents / 100.0) as estimated_val
+    FROM service_bookings
+    WHERE teacher_id = ?
+  `).all(teacherId);
+
+  // Merge and deduplicate by email
+  const audienceMap = new Map();
+
+  for (const item of [...subscribers, ...serviceClients, ...leadClaims]) {
+    const key = (item.email || '').toLowerCase().trim();
+    if (!key) continue;
+    if (!audienceMap.has(key)) {
+      audienceMap.set(key, {
+        name: item.name || 'Anonymous Student',
+        email: key,
+        relationships: [item.relationship],
+        status: item.status || 'Active',
+        acquired_at: item.acquired_at || new Date().toISOString(),
+        total_spend: Number(item.estimated_val || 0)
+      });
+    } else {
+      const existing = audienceMap.get(key);
+      if (!existing.relationships.includes(item.relationship)) {
+        existing.relationships.push(item.relationship);
+      }
+      existing.total_spend += Number(item.estimated_val || 0);
+    }
+  }
+
+  const rows = [
+    ['Full Name', 'Email Address', 'Audience Type / Relationship', 'Lifecycle Status', 'Acquired Date', 'Estimated Value ($)']
+  ];
+
+  for (const a of audienceMap.values()) {
+    rows.push([
+      `"${(a.name || '').replace(/"/g, '""')}"`,
+      `"${a.email}"`,
+      `"${a.relationships.join(' + ')}"`,
+      `"${a.status}"`,
+      `"${a.acquired_at ? new Date(a.acquired_at).toLocaleDateString() : ''}"`,
+      `"${a.total_spend.toFixed(2)}"`
+    ]);
+  }
+
+  return rows.map(r => r.join(',')).join('\r\n');
 }
 
 // Teacher Overview & Financial Simulation
@@ -29,8 +100,9 @@ router.get('/overview', requireRole('teacher'), async (req, res) => {
     // Monthly subscription price
     const monthlyPriceCents = profile.monthly_price_cents;
     const grossMonthlyRevenueCents = activeSubscribers * monthlyPriceCents;
-    const commissionRate = await getPlatformCommissionRate();
-    const platformCommissionCents = Math.round(grossMonthlyRevenueCents * commissionRate);
+    const standardCommissionRate = await getPlatformCommissionRate(profile);
+    const selfReferredCommissionRate = 0.03; // 3% for self-referred students
+    const platformCommissionCents = Math.round(grossMonthlyRevenueCents * standardCommissionRate);
     const estimatedTeacherEarningsCents = grossMonthlyRevenueCents - platformCommissionCents;
 
     // List of active subscribers
@@ -70,20 +142,60 @@ router.get('/overview', requireRole('teacher'), async (req, res) => {
       ORDER BY c.created_at DESC
     `).all(teacherId);
 
+    // Lead Magnets
+    const leadMagnets = await db.prepare(`
+      SELECT * FROM lead_magnets WHERE teacher_id = ? ORDER BY downloads_count DESC, id DESC
+    `).all(teacherId);
+
+    // Micro-Services
+    const services = await db.prepare(`
+      SELECT * FROM services WHERE teacher_id = ? ORDER BY price_cents ASC
+    `).all(teacherId);
+
+    // Service Bookings
+    const serviceBookings = await db.prepare(`
+      SELECT sb.*, s.title as service_title, s.duration_minutes, s.service_type
+      FROM service_bookings sb
+      JOIN services s ON sb.service_id = s.id
+      WHERE sb.teacher_id = ?
+      ORDER BY sb.created_at DESC
+      LIMIT 20
+    `).all(teacherId);
+
+    // Audience counts
+    const leadCountRow = await db.prepare('SELECT COUNT(*) as count FROM lead_magnet_claims WHERE teacher_id = ?').get(teacherId);
+    const totalLeads = Number(leadCountRow?.count || 0);
+
+    let parsedExternalLinks = {};
+    try {
+      parsedExternalLinks = JSON.parse(profile.external_links || '{}');
+    } catch {
+      parsedExternalLinks = {};
+    }
+
     res.json({
       profile: {
         ...profile,
         subjects: JSON.parse(profile.subjects || '[]'),
-        educational_levels: JSON.parse(profile.educational_levels || '[]')
+        educational_levels: JSON.parse(profile.educational_levels || '[]'),
+        external_links: parsedExternalLinks,
+        commission_rate: profile.commission_rate !== null ? profile.commission_rate : 0.10
       },
       stats: {
         active_subscribers: activeSubscribers,
         subscription_price: (monthlyPriceCents / 100).toFixed(2),
         gross_monthly_revenue: (grossMonthlyRevenueCents / 100).toFixed(2),
-        platform_commission_percent: Math.round(commissionRate * 100),
+        platform_commission_percent: Math.round(standardCommissionRate * 100),
         platform_commission_amount: (platformCommissionCents / 100).toFixed(2),
         estimated_teacher_earnings: (estimatedTeacherEarningsCents / 100).toFixed(2),
-        total_courses: courses.length
+        self_referred_commission_percent: Math.round(selfReferredCommissionRate * 100),
+        self_referred_take_rate: 97,
+        total_courses: courses.length,
+        total_lead_magnets: leadMagnets.length,
+        total_downloads: leadMagnets.reduce((acc, lm) => acc + Number(lm.downloads_count || 0), 0),
+        total_services: services.length,
+        total_bookings: serviceBookings.length,
+        total_leads: totalLeads
       },
       subscribers,
       payments: payments.map(p => ({
@@ -96,6 +208,15 @@ router.get('/overview', requireRole('teacher'), async (req, res) => {
         ...c,
         total_lessons: Number(c.total_lessons || 0),
         active_learners: Number(c.active_learners || 0)
+      })),
+      lead_magnets: leadMagnets,
+      services: services.map(s => ({
+        ...s,
+        price_dollars: (s.price_cents / 100).toFixed(2)
+      })),
+      service_bookings: serviceBookings.map(sb => ({
+        ...sb,
+        price_dollars: (sb.price_cents / 100).toFixed(2)
       }))
     });
   } catch (error) {
@@ -104,30 +225,359 @@ router.get('/overview', requireRole('teacher'), async (req, res) => {
   }
 });
 
-// Update Teacher Subscription Price & Profile
+// Update Teacher Profile & Settings
 router.post('/settings', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
-    const { headline, bio, monthly_price_cents } = req.body;
+    const { 
+      headline, 
+      bio, 
+      custom_bio, 
+      monthly_price_cents, 
+      handle, 
+      tier, 
+      referral_code, 
+      external_links 
+    } = req.body;
 
     if (monthly_price_cents && parseInt(monthly_price_cents) < 100) {
       return res.status(400).json({ error: 'Price must be at least $1.00' });
     }
 
+    // Handle uniqueness validation if handle provided
+    let cleanHandle = null;
+    if (handle) {
+      cleanHandle = handle.replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (cleanHandle.length < 2) {
+        return res.status(400).json({ error: 'Handle must be at least 2 characters long' });
+      }
+      const existing = await db.prepare('SELECT user_id FROM teacher_profiles WHERE LOWER(handle) = ? AND user_id != ?').get(cleanHandle, teacherId);
+      if (existing) {
+        return res.status(400).json({ error: `Handle @${cleanHandle} is already taken by another creator` });
+      }
+    }
+
+    // Referral code uniqueness validation if provided
+    let cleanRefCode = null;
+    if (referral_code) {
+      cleanRefCode = referral_code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+      const existingRef = await db.prepare('SELECT user_id FROM teacher_profiles WHERE UPPER(referral_code) = ? AND user_id != ?').get(cleanRefCode, teacherId);
+      if (existingRef) {
+        return res.status(400).json({ error: `Referral code ${cleanRefCode} is already in use` });
+      }
+    }
+
+    const linksString = external_links ? (typeof external_links === 'string' ? external_links : JSON.stringify(external_links)) : null;
+
     await db.prepare(`
       UPDATE teacher_profiles 
       SET headline = COALESCE(?, headline),
           bio = COALESCE(?, bio),
-          monthly_price_cents = COALESCE(?, monthly_price_cents)
+          custom_bio = COALESCE(?, custom_bio),
+          monthly_price_cents = COALESCE(?, monthly_price_cents),
+          handle = COALESCE(?, handle),
+          tier = COALESCE(?, tier),
+          referral_code = COALESCE(?, referral_code),
+          external_links = COALESCE(?, external_links)
       WHERE user_id = ?
-    `).run(headline, bio, monthly_price_cents ? parseInt(monthly_price_cents) : null, teacherId);
+    `).run(
+      headline !== undefined ? headline : null,
+      bio !== undefined ? bio : null,
+      custom_bio !== undefined ? custom_bio : null,
+      monthly_price_cents ? parseInt(monthly_price_cents) : null,
+      cleanHandle,
+      tier || null,
+      cleanRefCode,
+      linksString,
+      teacherId
+    );
 
-    res.json({ success: true, message: 'Teacher profile updated successfully' });
+    res.json({ success: true, message: 'Creator profile & settings updated successfully' });
   } catch (error) {
     console.error('Update teacher settings error:', error);
     res.status(500).json({ error: 'Failed to update settings' });
   }
 });
+
+// --- LEAD MAGNET ROUTES ---
+
+// GET /api/teacher-dashboard/lead-magnets
+router.get('/lead-magnets', requireRole('teacher'), async (req, res) => {
+  try {
+    const list = await db.prepare(`
+      SELECT * FROM lead_magnets WHERE teacher_id = ? ORDER BY downloads_count DESC, id DESC
+    `).all(req.user.id);
+    res.json(list);
+  } catch (error) {
+    console.error('Fetch lead magnets error:', error);
+    res.status(500).json({ error: 'Failed to fetch lead magnets' });
+  }
+});
+
+// POST /api/teacher-dashboard/lead-magnets
+router.post('/lead-magnets', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const { title, description, file_url } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Lead magnet title is required' });
+    }
+
+    const url = (file_url || '').trim() || 'https://example.com/assets/free-guide.pdf';
+
+    const result = await db.prepare(`
+      INSERT INTO lead_magnets (teacher_id, title, description, file_url, downloads_count)
+      VALUES (?, ?, ?, ?, 0)
+    `).run(teacherId, title.trim(), description || '', url);
+
+    res.status(201).json({
+      success: true,
+      message: 'Lead magnet created successfully',
+      lead_magnet: {
+        id: result.lastInsertRowid,
+        teacher_id: teacherId,
+        title: title.trim(),
+        description: description || '',
+        file_url: url,
+        downloads_count: 0
+      }
+    });
+  } catch (error) {
+    console.error('Create lead magnet error:', error);
+    res.status(500).json({ error: 'Failed to create lead magnet' });
+  }
+});
+
+// PUT /api/teacher-dashboard/lead-magnets/:id
+router.put('/lead-magnets/:id', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const id = parseInt(req.params.id);
+    const { title, description, file_url } = req.body;
+
+    const existing = await db.prepare('SELECT id FROM lead_magnets WHERE id = ? AND teacher_id = ?').get(id, teacherId);
+    if (!existing) {
+      return res.status(404).json({ error: 'Lead magnet not found or access denied' });
+    }
+
+    await db.prepare(`
+      UPDATE lead_magnets
+      SET title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          file_url = COALESCE(?, file_url)
+      WHERE id = ? AND teacher_id = ?
+    `).run(title ? title.trim() : null, description !== undefined ? description : null, file_url ? file_url.trim() : null, id, teacherId);
+
+    res.json({ success: true, message: 'Lead magnet updated successfully' });
+  } catch (error) {
+    console.error('Update lead magnet error:', error);
+    res.status(500).json({ error: 'Failed to update lead magnet' });
+  }
+});
+
+// DELETE /api/teacher-dashboard/lead-magnets/:id
+router.delete('/lead-magnets/:id', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const id = parseInt(req.params.id);
+
+    const existing = await db.prepare('SELECT id FROM lead_magnets WHERE id = ? AND teacher_id = ?').get(id, teacherId);
+    if (!existing) {
+      return res.status(404).json({ error: 'Lead magnet not found or access denied' });
+    }
+
+    await db.prepare('DELETE FROM lead_magnets WHERE id = ? AND teacher_id = ?').run(id, teacherId);
+    res.json({ success: true, message: 'Lead magnet deleted successfully' });
+  } catch (error) {
+    console.error('Delete lead magnet error:', error);
+    res.status(500).json({ error: 'Failed to delete lead magnet' });
+  }
+});
+
+// --- MICRO-SERVICES ROUTES ---
+
+// GET /api/teacher-dashboard/services
+router.get('/services', requireRole('teacher'), async (req, res) => {
+  try {
+    const list = await db.prepare(`
+      SELECT * FROM services WHERE teacher_id = ? ORDER BY id ASC
+    `).all(req.user.id);
+    res.json(list.map(s => ({
+      ...s,
+      price_dollars: (s.price_cents / 100).toFixed(2)
+    })));
+  } catch (error) {
+    console.error('Fetch services error:', error);
+    res.status(500).json({ error: 'Failed to fetch services' });
+  }
+});
+
+// POST /api/teacher-dashboard/services
+router.post('/services', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const { title, price_cents, duration_minutes, service_type } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Service title is required' });
+    }
+
+    const price = price_cents ? parseInt(price_cents) : 1500;
+    const duration = duration_minutes ? parseInt(duration_minutes) : 30;
+    const type = ['quick_review', 'qa_session', 'mentorship'].includes(service_type) ? service_type : 'quick_review';
+
+    const result = await db.prepare(`
+      INSERT INTO services (teacher_id, title, price_cents, duration_minutes, service_type, is_active)
+      VALUES (?, ?, ?, ?, ?, 1)
+    `).run(teacherId, title.trim(), price, duration, type);
+
+    res.status(201).json({
+      success: true,
+      message: 'Micro-service created successfully',
+      service: {
+        id: result.lastInsertRowid,
+        teacher_id: teacherId,
+        title: title.trim(),
+        price_cents: price,
+        price_dollars: (price / 100).toFixed(2),
+        duration_minutes: duration,
+        service_type: type,
+        is_active: 1
+      }
+    });
+  } catch (error) {
+    console.error('Create service error:', error);
+    res.status(500).json({ error: 'Failed to create service' });
+  }
+});
+
+// PUT /api/teacher-dashboard/services/:id
+router.put('/services/:id', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const id = parseInt(req.params.id);
+    const { title, price_cents, duration_minutes, service_type, is_active } = req.body;
+
+    const existing = await db.prepare('SELECT id FROM services WHERE id = ? AND teacher_id = ?').get(id, teacherId);
+    if (!existing) {
+      return res.status(404).json({ error: 'Service not found or access denied' });
+    }
+
+    await db.prepare(`
+      UPDATE services
+      SET title = COALESCE(?, title),
+          price_cents = COALESCE(?, price_cents),
+          duration_minutes = COALESCE(?, duration_minutes),
+          service_type = COALESCE(?, service_type),
+          is_active = COALESCE(?, is_active)
+      WHERE id = ? AND teacher_id = ?
+    `).run(
+      title ? title.trim() : null,
+      price_cents !== undefined ? parseInt(price_cents) : null,
+      duration_minutes !== undefined ? parseInt(duration_minutes) : null,
+      service_type || null,
+      is_active !== undefined ? (is_active ? 1 : 0) : null,
+      id,
+      teacherId
+    );
+
+    res.json({ success: true, message: 'Service updated successfully' });
+  } catch (error) {
+    console.error('Update service error:', error);
+    res.status(500).json({ error: 'Failed to update service' });
+  }
+});
+
+// DELETE /api/teacher-dashboard/services/:id
+router.delete('/services/:id', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const id = parseInt(req.params.id);
+
+    const existing = await db.prepare('SELECT id FROM services WHERE id = ? AND teacher_id = ?').get(id, teacherId);
+    if (!existing) {
+      return res.status(404).json({ error: 'Service not found or access denied' });
+    }
+
+    await db.prepare('DELETE FROM services WHERE id = ? AND teacher_id = ?').run(id, teacherId);
+    res.json({ success: true, message: 'Service deleted successfully' });
+  } catch (error) {
+    console.error('Delete service error:', error);
+    res.status(500).json({ error: 'Failed to delete service' });
+  }
+});
+
+// --- AUDIENCE & CSV EXPORT ROUTES ---
+
+// GET /api/teacher-dashboard/audience
+router.get('/audience', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+
+    // 1. Subscribers
+    const subscribers = await db.prepare(`
+      SELECT u.id as student_id, u.name, u.email, u.avatar_url, s.started_at, s.status, 'Subscriber' as audience_type,
+             (s.price_cents / 100.0) as estimated_val
+      FROM subscriptions s
+      JOIN users u ON s.student_id = u.id
+      WHERE s.teacher_id = ?
+      ORDER BY s.started_at DESC
+    `).all(teacherId);
+
+    // 2. Leads (claimed lead magnets)
+    const leads = await db.prepare(`
+      SELECT lmc.id, lmc.student_name as name, lmc.student_email as email, lmc.claimed_at as started_at, 'Active Lead' as status, 'Lead Magnet' as audience_type,
+             0 as estimated_val, lm.title as resource_title
+      FROM lead_magnet_claims lmc
+      JOIN lead_magnets lm ON lmc.lead_magnet_id = lm.id
+      WHERE lmc.teacher_id = ?
+      ORDER BY lmc.claimed_at DESC
+    `).all(teacherId);
+
+    // 3. Service Clients
+    const clients = await db.prepare(`
+      SELECT sb.id, sb.student_name as name, sb.student_email as email, sb.created_at as started_at, sb.status, 'Micro-Service' as audience_type,
+             (sb.price_cents / 100.0) as estimated_val, s.title as service_title
+      FROM service_bookings sb
+      JOIN services s ON sb.service_id = s.id
+      WHERE sb.teacher_id = ?
+      ORDER BY sb.created_at DESC
+    `).all(teacherId);
+
+    res.json({
+      subscribers,
+      leads,
+      clients,
+      totals: {
+        total_subscribers: subscribers.length,
+        total_leads: leads.length,
+        total_clients: clients.length,
+        total_unique: new Set([...subscribers.map(s => s.email), ...leads.map(l => l.email), ...clients.map(c => c.email)]).size
+      }
+    });
+  } catch (error) {
+    console.error('Fetch audience error:', error);
+    res.status(500).json({ error: 'Failed to load audience' });
+  }
+});
+
+// GET /api/teacher-dashboard/audience/export-csv
+router.get('/audience/export-csv', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const csvContent = await generateAudienceCsvData(teacherId);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="korsa_creator_audience_${teacherId}.csv"`);
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Audience export CSV error:', error);
+    res.status(500).json({ error: 'Failed to export audience CSV' });
+  }
+});
+
+// --- COURSE, SECTION, LESSON MANAGEMENT (EXISTING ROUTES PRESERVED) ---
 
 // Get full course with sections and lessons for editing
 router.get('/courses/:id/full', requireRole('teacher'), async (req, res) => {
@@ -172,7 +622,6 @@ router.post('/courses', requireRole('teacher'), async (req, res) => {
       return res.status(400).json({ error: 'Course title is required' });
     }
 
-    // Find or get subject
     let subject = await db.prepare('SELECT id FROM subjects WHERE name = ?').get(subject_name || 'Mathematics');
     if (!subject) {
       subject = await db.prepare('SELECT id FROM subjects LIMIT 1').get();
@@ -193,9 +642,7 @@ router.post('/courses', requireRole('teacher'), async (req, res) => {
     );
 
     const courseId = result.lastInsertRowid;
-
-    // Create a default first section
-    await db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, ?)').run(courseId, 'Section 1: Introduction & Fundamentals', 1);
+    await db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, 1)').run(courseId, 'Section 1: Introduction & Fundamentals');
 
     res.status(201).json({
       success: true,
@@ -272,7 +719,7 @@ router.delete('/courses/:id', requireRole('teacher'), async (req, res) => {
   }
 });
 
-// Add section to course
+// Add section
 router.post('/courses/:id/sections', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
@@ -288,7 +735,6 @@ router.post('/courses/:id/sections', requireRole('teacher'), async (req, res) =>
       return res.status(404).json({ error: 'Course not found or access denied' });
     }
 
-    // Next order index
     const maxOrder = await db.prepare('SELECT MAX(order_index) as max_order FROM sections WHERE course_id = ?').get(courseId);
     const nextOrder = (Number(maxOrder?.max_order || 0)) + 1;
 
@@ -368,19 +814,17 @@ router.delete('/sections/:id', requireRole('teacher'), async (req, res) => {
 router.post('/lessons', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
-    const { course_id, section_id, title, description, video_url, duration_minutes, access_level } = req.body;
+    const { course_id, section_id, title, description, video_url, duration_minutes, access_level, is_free_preview } = req.body;
 
     if (!course_id || !title || !access_level) {
       return res.status(400).json({ error: 'course_id, title, and access_level are required' });
     }
 
-    // Verify course belongs to this teacher
     const course = await db.prepare('SELECT id FROM courses WHERE id = ? AND teacher_id = ?').get(course_id, teacherId);
     if (!course) {
       return res.status(403).json({ error: 'You do not own this course' });
     }
 
-    // Verify or find section
     let targetSectionId = section_id;
     if (!targetSectionId) {
       const section = await db.prepare('SELECT id FROM sections WHERE course_id = ? ORDER BY order_index ASC LIMIT 1').get(course_id);
@@ -392,13 +836,13 @@ router.post('/lessons', requireRole('teacher'), async (req, res) => {
       }
     }
 
-    // Next order index
     const maxOrder = await db.prepare('SELECT MAX(order_index) as max_order FROM lessons WHERE section_id = ?').get(targetSectionId);
     const nextOrder = (Number(maxOrder?.max_order || 0)) + 1;
+    const isFree = access_level === 'FREE' || Boolean(is_free_preview) ? 1 : 0;
 
     const insertLesson = db.prepare(`
-      INSERT INTO lessons (section_id, course_id, teacher_id, title, description, video_url, duration_minutes, access_level, order_index, is_published)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO lessons (section_id, course_id, teacher_id, title, description, video_url, duration_minutes, access_level, is_free_preview, order_index, is_published)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `);
 
     const result = await insertLesson.run(
@@ -410,6 +854,7 @@ router.post('/lessons', requireRole('teacher'), async (req, res) => {
       video_url || '',
       duration_minutes ? parseInt(duration_minutes) : 15,
       access_level,
+      isFree,
       nextOrder
     );
 
@@ -429,12 +874,14 @@ router.put('/lessons/:id', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const lessonId = parseInt(req.params.id);
-    const { title, description, video_url, duration_minutes, access_level, order_index, is_published } = req.body;
+    const { title, description, video_url, duration_minutes, access_level, is_free_preview, order_index, is_published } = req.body;
 
     const lesson = await db.prepare('SELECT id FROM lessons WHERE id = ? AND teacher_id = ?').get(lessonId, teacherId);
     if (!lesson) {
       return res.status(404).json({ error: 'Lesson not found or access denied' });
     }
+
+    const freePreviewFlag = is_free_preview !== undefined ? (is_free_preview ? 1 : 0) : (access_level === 'FREE' ? 1 : null);
 
     await db.prepare(`
       UPDATE lessons
@@ -443,6 +890,7 @@ router.put('/lessons/:id', requireRole('teacher'), async (req, res) => {
           video_url = COALESCE(?, video_url),
           duration_minutes = COALESCE(?, duration_minutes),
           access_level = COALESCE(?, access_level),
+          is_free_preview = COALESCE(?, is_free_preview),
           order_index = COALESCE(?, order_index),
           is_published = COALESCE(?, is_published)
       WHERE id = ? AND teacher_id = ?
@@ -452,6 +900,7 @@ router.put('/lessons/:id', requireRole('teacher'), async (req, res) => {
       video_url !== undefined ? video_url : null,
       duration_minutes !== undefined ? parseInt(duration_minutes) : null,
       access_level || null,
+      freePreviewFlag,
       order_index !== undefined ? parseInt(order_index) : null,
       is_published !== undefined ? (is_published ? 1 : 0) : null,
       lessonId,
@@ -488,7 +937,7 @@ router.delete('/lessons/:id', requireRole('teacher'), async (req, res) => {
 router.post('/reorder', requireRole('teacher'), async (req, res) => {
   try {
     const teacherId = req.user.id;
-    const { type, items } = req.body; // items: [{ id, order_index }]
+    const { type, items } = req.body;
 
     if (!Array.isArray(items) || !['sections', 'lessons'].includes(type)) {
       return res.status(400).json({ error: 'Invalid reorder payload' });

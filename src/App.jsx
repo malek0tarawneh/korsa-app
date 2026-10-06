@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import AuthModal from './components/AuthModal';
@@ -6,6 +6,7 @@ import SubscribeModal from './components/SubscribeModal';
 import LessonModal from './components/LessonModal';
 import LandingPage from './pages/LandingPage';
 import TeacherProfilePage from './pages/TeacherProfilePage';
+import CreatorProfilePage from './pages/CreatorProfilePage';
 import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -17,20 +18,57 @@ function AppContent() {
   // Navigation states
   const [currentView, setCurrentView] = useState('landing');
   const [selectedTeacherId, setSelectedTeacherId] = useState(null);
+  const [creatorHandle, setCreatorHandle] = useState(null);
 
   // Modals state
   const [authModal, setAuthModal] = useState({ isOpen: false, mode: 'login' });
   const [subscribeModal, setSubscribeModal] = useState({ isOpen: false, teacher: null });
   const [lessonModal, setLessonModal] = useState({ isOpen: false, lesson: null, teacher: null });
 
-  // Open teacher profile
+  // Listen to browser path for /@handle
+  useEffect(() => {
+    const handleUrlRoute = () => {
+      const path = window.location.pathname;
+      if (path.startsWith('/@') && path.length > 2) {
+        const h = decodeURIComponent(path.slice(2)).trim();
+        if (h) {
+          setCreatorHandle(h);
+          setCurrentView('creator-profile');
+          return;
+        }
+      }
+
+      // Check ?ref= in search params
+      const searchParams = new URLSearchParams(window.location.search);
+      const refCode = searchParams.get('ref');
+      if (refCode) {
+        localStorage.setItem('korsa_pending_ref', refCode);
+      }
+    };
+
+    handleUrlRoute();
+    window.addEventListener('popstate', handleUrlRoute);
+    return () => window.removeEventListener('popstate', handleUrlRoute);
+  }, []);
+
+  // Open teacher profile (legacy/course drilldown)
   const handleSelectTeacher = (id) => {
     if (!id) {
       setCurrentView('landing');
+      window.history.pushState(null, '', '/');
       return;
     }
     setSelectedTeacherId(id);
     setCurrentView('teacher-profile');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Open creator vanity profile /@handle
+  const handleSelectCreator = (handleOrTeacher) => {
+    const h = typeof handleOrTeacher === 'string' ? handleOrTeacher : handleOrTeacher.handle || handleOrTeacher.id;
+    setCreatorHandle(h);
+    setCurrentView('creator-profile');
+    window.history.pushState(null, '', `/@${h}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -57,6 +95,9 @@ function AppContent() {
         currentView={currentView}
         setCurrentView={(view) => {
           setCurrentView(view);
+          if (view === 'landing' || view === 'explore') {
+            window.history.pushState(null, '', '/');
+          }
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         openAuthModal={handleOpenAuth}
@@ -67,6 +108,21 @@ function AppContent() {
         {(currentView === 'landing' || currentView === 'explore') && (
           <LandingPage 
             onSelectTeacher={handleSelectTeacher}
+            onSelectCreator={handleSelectCreator}
+            onOpenAuth={handleOpenAuth}
+          />
+        )}
+
+        {currentView === 'creator-profile' && creatorHandle && (
+          <CreatorProfilePage 
+            handle={creatorHandle}
+            onBack={() => {
+              setCurrentView('landing');
+              window.history.pushState(null, '', '/');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onOpenSubscribe={handleOpenSubscribe}
+            onOpenLesson={handleOpenLesson}
             onOpenAuth={handleOpenAuth}
           />
         )}
@@ -74,7 +130,10 @@ function AppContent() {
         {currentView === 'teacher-profile' && selectedTeacherId && (
           <TeacherProfilePage 
             teacherId={selectedTeacherId}
-            onBack={() => setCurrentView('landing')}
+            onBack={() => {
+              setCurrentView('landing');
+              window.history.pushState(null, '', '/');
+            }}
             onOpenSubscribe={handleOpenSubscribe}
             onOpenLesson={handleOpenLesson}
             onOpenAuth={handleOpenAuth}
@@ -84,6 +143,7 @@ function AppContent() {
         {currentView === 'student-dashboard' && (
           <StudentDashboard 
             onSelectTeacher={handleSelectTeacher}
+            onSelectCreator={handleSelectCreator}
             onOpenLesson={handleOpenLesson}
           />
         )}
@@ -91,6 +151,7 @@ function AppContent() {
         {currentView === 'teacher-dashboard' && (
           <TeacherDashboard 
             onSelectTeacher={handleSelectTeacher}
+            onSelectCreator={handleSelectCreator}
           />
         )}
 

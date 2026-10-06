@@ -13,9 +13,14 @@ import authRoutes from './routes/auth.js';
 import teacherRoutes from './routes/teachers.js';
 import subscriptionRoutes from './routes/subscriptions.js';
 import progressRoutes from './routes/progress.js';
-import teacherDashboardRoutes from './routes/teacherDashboard.js';
+import teacherDashboardRoutes, { generateAudienceCsvData } from './routes/teacherDashboard.js';
 import adminRoutes from './routes/admin.js';
 import reviewRoutes from './routes/reviews.js';
+import creatorRoutes from './routes/creators.js';
+import leadMagnetRoutes from './routes/leadMagnets.js';
+import serviceRoutes from './routes/services.js';
+import referralRoutes from './routes/referrals.js';
+import { requireRole } from './auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,6 +41,23 @@ app.use('/api/progress', progressRoutes);
 app.use('/api/teacher-dashboard', teacherDashboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/creators', creatorRoutes);
+app.use('/api/lead-magnets', leadMagnetRoutes);
+app.use('/api/services', serviceRoutes);
+app.use('/api/referrals', referralRoutes);
+
+// Direct Audience Export: GET /api/teacher/audience/export-csv
+app.get('/api/teacher/audience/export-csv', requireRole('teacher'), async (req, res) => {
+  try {
+    const csvContent = await generateAudienceCsvData(req.user.id);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="korsa_creator_audience_${req.user.id}.csv"`);
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Audience export CSV error:', error);
+    res.status(500).json({ error: 'Failed to export audience CSV' });
+  }
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -72,3 +94,5 @@ async function startServer() {
 }
 
 startServer();
+
+export default app;

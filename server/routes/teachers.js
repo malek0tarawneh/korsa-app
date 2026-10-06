@@ -12,9 +12,12 @@ router.get('/', async (req, res) => {
     let query = `
       SELECT 
         u.id, u.name, u.avatar_url,
-        tp.headline, tp.bio, tp.subjects, tp.educational_levels,
+        tp.handle, tp.tier, tp.headline, tp.bio, tp.custom_bio, tp.referral_code, tp.subjects, tp.educational_levels,
         tp.monthly_price_cents, tp.rating, tp.review_count, tp.subscriber_count,
-        (SELECT COUNT(*) FROM courses WHERE teacher_id = u.id AND is_published = 1) as course_count
+        (SELECT COUNT(*) FROM courses WHERE teacher_id = u.id AND is_published = 1) as course_count,
+        (SELECT COUNT(*) FROM lead_magnets WHERE teacher_id = u.id) as lead_magnet_count,
+        (SELECT COUNT(*) FROM lessons WHERE teacher_id = u.id AND (is_free_preview = 1 OR access_level = 'FREE') AND is_published = 1) as free_sample_count,
+        (SELECT COUNT(*) FROM services WHERE teacher_id = u.id AND is_active = 1) as service_count
       FROM users u
       JOIN teacher_profiles tp ON u.id = tp.user_id
       WHERE u.role = 'teacher' AND tp.is_approved = 1
@@ -22,9 +25,9 @@ router.get('/', async (req, res) => {
     const params = [];
 
     if (search) {
-      query += ` AND (u.name LIKE ? OR tp.headline LIKE ? OR tp.bio LIKE ?)`;
+      query += ` AND (u.name LIKE ? OR tp.headline LIKE ? OR tp.bio LIKE ? OR tp.handle LIKE ?)`;
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam);
+      params.push(searchParam, searchParam, searchParam, searchParam);
     }
 
     if (subject && subject !== 'all') {
@@ -43,7 +46,11 @@ router.get('/', async (req, res) => {
 
     const formattedTeachers = teachers.map(t => ({
       ...t,
+      tier: t.tier || 'community_tutor',
       course_count: Number(t.course_count || 0),
+      lead_magnet_count: Number(t.lead_magnet_count || 0),
+      free_sample_count: Number(t.free_sample_count || 0),
+      service_count: Number(t.service_count || 0),
       subjects: JSON.parse(t.subjects || '[]'),
       educational_levels: JSON.parse(t.educational_levels || '[]'),
       monthly_price: (t.monthly_price_cents / 100).toFixed(2)

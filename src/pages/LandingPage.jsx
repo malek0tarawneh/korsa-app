@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Search, 
   Sparkles, 
@@ -9,25 +9,21 @@ import {
   Users, 
   ArrowRight, 
   CheckCircle2, 
-  SlidersHorizontal 
+  SlidersHorizontal,
+  Gift,
+  Zap,
+  Play,
+  FileText
 } from 'lucide-react';
 
-export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
+export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAuth }) {
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState('all');
   const [selectedGrade, setSelectedGrade] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Live debounced search & filter
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchTeachers();
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [searchQuery, selectedSubject, selectedGrade]);
-
-  const fetchTeachers = async () => {
+  const fetchTeachers = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -45,7 +41,15 @@ export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, selectedSubject, selectedGrade]);
+
+  // Live debounced search & filter
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchTeachers();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [fetchTeachers]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -79,22 +83,40 @@ export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
       }}>
         <div className="container" style={{ textAlign: 'center', maxWidth: '860px' }}>
           
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.35rem 0.85rem',
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-full)',
-            fontSize: '0.825rem',
-            fontWeight: '600',
-            color: 'var(--color-primary-dark)',
-            marginBottom: '1.25rem',
-            boxShadow: 'var(--shadow-sm)'
-          }}>
-            <Sparkles size={14} color="var(--color-primary)" />
-            Direct Teacher-to-Student Education Platform
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.35rem 0.85rem',
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.825rem',
+              fontWeight: '600',
+              color: 'var(--color-primary-dark)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <Sparkles size={14} color="var(--color-primary)" />
+              Direct Teacher-to-Student Creator Flywheel
+            </div>
+
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.35rem 0.85rem',
+              backgroundColor: '#ecfdf5',
+              border: '1px solid #a7f3d0',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.825rem',
+              fontWeight: '700',
+              color: '#065f46',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <Gift size={14} color="#059669" />
+              Permanent Free Explorer Mode · Free Cheat Sheets & Previews
+            </div>
           </div>
 
           <h1 style={{
@@ -116,7 +138,7 @@ export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
             maxWidth: '680px',
             margin: '0 auto 2rem auto'
           }}>
-            Subscribe directly to passionate educators for focused, curriculum-aligned lessons. Try free sample lessons first, then unlock complete courses with affordable monthly subscriptions.
+            Explore independent creators and passionate tutors. Download free exam roadmaps, watch previewable lessons with zero paywall, or book 1-on-1 micro-tutoring.
           </p>
 
           {/* Action CTAs */}
@@ -128,13 +150,13 @@ export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
               }}
               className="btn btn-primary btn-lg"
             >
-              Start Learning <ArrowRight size={18} />
+              Explore Free Resources <ArrowRight size={18} />
             </button>
             <button 
               onClick={() => onOpenAuth('register')}
               className="btn btn-secondary btn-lg"
             >
-              Become a Teacher
+              Free 1-Click Student Signup
             </button>
           </div>
 
@@ -335,42 +357,124 @@ export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                 }}
-                onClick={() => onSelectTeacher(t.id)}
+                onClick={() => {
+                  if (onSelectCreator && t.handle) {
+                    onSelectCreator(t.handle);
+                  } else {
+                    onSelectTeacher(t.id);
+                  }
+                }}
               >
                 <div>
-                  {/* Top Header: Avatar, Name, Rating */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  {/* Top Header: Avatar, Name, Rating & Vanity Handle */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.85rem' }}>
                     <img 
                       src={t.avatar_url} 
                       alt={t.name}
-                      style={{ width: '60px', height: '60px', borderRadius: 'var(--radius-full)', objectFit: 'cover' }}
+                      style={{ 
+                        width: '56px', 
+                        height: '56px', 
+                        borderRadius: 'var(--radius-full)', 
+                        objectFit: 'cover',
+                        border: t.tier === 'expert_creator' ? '2px solid #6366f1' : '2px solid #10b981'
+                      }}
                     />
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--color-secondary)' }}>
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--color-secondary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {t.name}
                         </h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.85rem', fontWeight: '700', color: '#d97706' }}>
                           <Star size={14} fill="#d97706" /> {t.rating.toFixed(1)}
                         </div>
                       </div>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: '500' }}>
+
+                      {/* Vanity Handle & Tier Pill */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                          @{t.handle || `teacher${t.id}`}
+                        </span>
+                        <span style={{
+                          fontSize: '0.675rem',
+                          fontWeight: '700',
+                          padding: '0.1rem 0.45rem',
+                          borderRadius: 'var(--radius-full)',
+                          backgroundColor: t.tier === 'expert_creator' ? '#e0e7ff' : '#ecfdf5',
+                          color: t.tier === 'expert_creator' ? '#4338ca' : '#047857'
+                        }}>
+                          {t.tier === 'expert_creator' ? '🌟 Expert Creator' : '🌱 Community Tutor'}
+                        </span>
+                      </div>
+
+                      <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {t.headline}
                       </p>
                     </div>
                   </div>
 
+                  {/* Creator Flywheel Badges (Free Samples, Lead Magnets, Services) */}
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                    {t.lead_magnet_count > 0 && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.725rem',
+                        fontWeight: '700',
+                        backgroundColor: '#dcfce7',
+                        color: '#15803d',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: 'var(--radius-full)'
+                      }}>
+                        <Gift size={12} /> {t.lead_magnet_count} Free Study Guide{t.lead_magnet_count > 1 ? 's' : ''}
+                      </span>
+                    )}
+
+                    {t.free_sample_count > 0 && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.725rem',
+                        fontWeight: '700',
+                        backgroundColor: '#e0f2fe',
+                        color: '#0369a1',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: 'var(--radius-full)'
+                      }}>
+                        <Play size={12} /> {t.free_sample_count} Free Sample Lesson{t.free_sample_count > 1 ? 's' : ''}
+                      </span>
+                    )}
+
+                    {t.service_count > 0 && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.725rem',
+                        fontWeight: '700',
+                        backgroundColor: '#fef3c7',
+                        color: '#b45309',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: 'var(--radius-full)'
+                      }}>
+                        <Zap size={12} /> Micro-Tutoring
+                      </span>
+                    )}
+                  </div>
+
                   {/* Subjects & Grade Badges */}
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
                     {t.subjects.map((sub, i) => (
-                      <span key={i} className="badge" style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                      <span key={i} className="badge" style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontSize: '0.725rem' }}>
                         {sub}
                       </span>
                     ))}
                     {t.educational_levels.map((lvl, i) => (
-                      <span key={i} className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
+                      <span key={i} className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.725rem' }}>
                         {lvl}
                       </span>
                     ))}
@@ -378,12 +482,12 @@ export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
 
                   {/* Bio excerpt */}
                   <p style={{
-                    fontSize: '0.875rem',
+                    fontSize: '0.85rem',
                     color: 'var(--color-text-muted)',
                     lineHeight: 1.5,
-                    marginBottom: '1.25rem',
+                    marginBottom: '1rem',
                     display: '-webkit-box',
-                    WebkitLineClamp: 3,
+                    WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
                     overflow: 'hidden'
                   }}>
@@ -396,27 +500,32 @@ export default function LandingPage({ onSelectTeacher, onOpenAuth }) {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  paddingTop: '1rem',
+                  paddingTop: '0.85rem',
                   borderTop: '1px solid var(--color-border)'
                 }}>
                   <div>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
+                    <span style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
                       ${t.monthly_price}
                     </span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}> / month</span>
-                    <div style={{ fontSize: '0.725rem', color: 'var(--color-accent)', fontWeight: '600', marginTop: '2px' }}>
-                      Free sample lesson included
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}> / mo</span>
+                    <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: '700', marginTop: '1px' }}>
+                      Free Preview Included
                     </div>
                   </div>
 
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelectTeacher(t.id);
+                      if (onSelectCreator && t.handle) {
+                        onSelectCreator(t.handle);
+                      } else {
+                        onSelectTeacher(t.id);
+                      }
                     }}
                     className="btn btn-primary btn-sm"
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                   >
-                    View Teacher <ArrowRight size={14} />
+                    View Hub <ArrowRight size={13} />
                   </button>
                 </div>
               </div>

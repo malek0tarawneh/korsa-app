@@ -38,8 +38,8 @@ export async function seedDatabase() {
   // 3. Insert Teachers
   const insertTeacherProfile = db.prepare(`
     INSERT INTO teacher_profiles 
-    (user_id, headline, bio, subjects, educational_levels, monthly_price_cents, is_approved, rating, review_count, subscriber_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (user_id, handle, tier, headline, bio, custom_bio, external_links, referral_code, commission_rate, subjects, educational_levels, monthly_price_cents, is_approved, rating, review_count, subscriber_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const teachersData = [
@@ -47,8 +47,18 @@ export async function seedDatabase() {
       name: 'Dr. Jordan Reed',
       email: 'jordan.math@learnly.com',
       avatar: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=150&auto=format&fit=crop&q=80',
+      handle: 'jordan',
+      tier: 'expert_creator',
+      referral_code: 'JORDAN2026',
+      commission_rate: 0.10,
       headline: 'Mathematics Specialist & University Lecturer',
       bio: 'Ph.D. in Applied Mathematics with 14 years of teaching experience. I specialize in breaking down complex calculus, differential equations, and exam preparations into clear, logical steps. My students consistently achieve top percentiles.',
+      custom_bio: 'Welcome! I help high school and university students conquer Calculus, Differential Equations, and STEM admissions. Access my free roadmaps or book 1-on-1 problem reviews.',
+      external_links: JSON.stringify({
+        linkedin: 'https://linkedin.com/in/jordanreed',
+        youtube: 'https://youtube.com/@jordanreedmath',
+        twitter: 'https://x.com/jordanreed'
+      }),
       subjects: JSON.stringify(['Mathematics']),
       educational_levels: JSON.stringify(['Grade 11', 'Grade 12', 'University']),
       monthly_price_cents: 500, // $5.00
@@ -60,8 +70,17 @@ export async function seedDatabase() {
       name: 'Elena Rostova',
       email: 'elena.physics@learnly.com',
       avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+      handle: 'elena',
+      tier: 'expert_creator',
+      referral_code: 'ELENA2026',
+      commission_rate: 0.10,
       headline: 'Physics Teacher & Olympiad Coach',
       bio: 'Passionate about demystifying physical concepts through intuitive thought experiments and systematic problem-solving frameworks. Former International Physics Olympiad trainer with a focus on classical mechanics and electromagnetism.',
+      custom_bio: 'Physics is intuitive when taught visually. Check out my free Free-Body Diagram guide or join my interactive problem-solving office hours.',
+      external_links: JSON.stringify({
+        youtube: 'https://youtube.com/@elenaphysics',
+        linkedin: 'https://linkedin.com/in/elenarostova'
+      }),
       subjects: JSON.stringify(['Physics']),
       educational_levels: JSON.stringify(['Grade 10', 'Grade 11', 'Grade 12']),
       monthly_price_cents: 600, // $6.00
@@ -73,8 +92,16 @@ export async function seedDatabase() {
       name: 'Dr. Marcus Vance',
       email: 'marcus.chem@learnly.com',
       avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+      handle: 'marcus',
+      tier: 'community_tutor',
+      referral_code: 'MARCUS2026',
+      commission_rate: 0.10,
       headline: 'Senior Chemistry Educator & Researcher',
       bio: 'Award-winning chemistry instructor specializing in organic reaction mechanisms and exam preparation. I turn confusing formulas into visual, memorable models so you understand the "why" behind reactions.',
+      custom_bio: 'Community tutor helping chemistry students ace their high school graduation and university chemistry prerequisites.',
+      external_links: JSON.stringify({
+        youtube: 'https://youtube.com/@marcuschem'
+      }),
       subjects: JSON.stringify(['Chemistry']),
       educational_levels: JSON.stringify(['Grade 10', 'Grade 11', 'Grade 12']),
       monthly_price_cents: 500, // $5.00
@@ -86,8 +113,16 @@ export async function seedDatabase() {
       name: 'Sarah Jenkins',
       email: 'sarah.english@learnly.com',
       avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+      handle: 'sarah',
+      tier: 'community_tutor',
+      referral_code: 'SARAH2026',
+      commission_rate: 0.10,
       headline: 'English Language & Academic Writing Coach',
       bio: 'Master of Arts in English Literature with a passion for helping students develop precise argumentative writing, analytical reading skills, and confidence in standardized examinations.',
+      custom_bio: 'Providing affordable micro-essay reviews and academic writing feedback for college-bound students.',
+      external_links: JSON.stringify({
+        linkedin: 'https://linkedin.com/in/sarahjenkins'
+      }),
       subjects: JSON.stringify(['English']),
       educational_levels: JSON.stringify(['Grade 10', 'Grade 11', 'Grade 12']),
       monthly_price_cents: 400, // $4.00
@@ -99,8 +134,17 @@ export async function seedDatabase() {
       name: 'Tariq Al-Mansoor',
       email: 'tariq.cs@learnly.com',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+      handle: 'tariq',
+      tier: 'expert_creator',
+      referral_code: 'TARIQ2026',
+      commission_rate: 0.10,
       headline: 'Computer Science Instructor & Software Engineer',
       bio: 'Former staff software engineer teaching computer science from first principles. I focus on core foundational concepts: algorithms, computational thinking, data structures, and practical programming with Python.',
+      custom_bio: 'Learn software engineering the right way: clean data structures, Big-O analysis, and practical coding interviews.',
+      external_links: JSON.stringify({
+        github: 'https://github.com/tariqdev',
+        youtube: 'https://youtube.com/@tariqcs'
+      }),
       subjects: JSON.stringify(['Computer Science']),
       educational_levels: JSON.stringify(['Grade 10', 'Grade 11', 'Grade 12', 'University']),
       monthly_price_cents: 700, // $7.00
@@ -117,8 +161,14 @@ export async function seedDatabase() {
     teacherIds.push({ userId, name: t.name, subjectSlug: t.subjects.includes('Mathematics') ? 'mathematics' : t.subjects.includes('Physics') ? 'physics' : t.subjects.includes('Chemistry') ? 'chemistry' : t.subjects.includes('English') ? 'english' : 'computer-science', price: t.monthly_price_cents });
     await insertTeacherProfile.run(
       userId,
+      t.handle,
+      t.tier,
       t.headline,
       t.bio,
+      t.custom_bio,
+      t.external_links,
+      t.referral_code,
+      t.commission_rate,
       t.subjects,
       t.educational_levels,
       t.monthly_price_cents,
@@ -162,12 +212,12 @@ export async function seedDatabase() {
   `);
   const insertSection = db.prepare('INSERT INTO sections (course_id, title, order_index) VALUES (?, ?, ?)');
   const insertLesson = db.prepare(`
-    INSERT INTO lessons (section_id, course_id, teacher_id, title, description, video_url, duration_minutes, access_level, order_index, is_published)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    INSERT INTO lessons (section_id, course_id, teacher_id, title, description, video_url, duration_minutes, access_level, is_free_preview, order_index, is_published)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `);
   const insertResource = db.prepare(`
-    INSERT INTO resources (lesson_id, title, file_url, file_type, access_level)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO resources (lesson_id, title, file_url, file_type, access_level, is_free_preview)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   // Course 1: Mathematics - Jordan Reed
@@ -195,12 +245,13 @@ export async function seedDatabase() {
     'https://www.youtube.com/embed/9vKqVkMQHKk',
     18,
     'FREE',
+    1,
     1
   );
   const l1 = l1Res.lastInsertRowid;
 
-  await insertResource.run(l1, 'Lecture Notes: Limits & Tangent Lines (PDF)', 'https://example.com/math-notes-01.pdf', 'PDF', 'FREE');
-  await insertResource.run(l1, 'Practice Problem Set 1 (Derivatives)', 'https://example.com/math-problems-01.pdf', 'PDF', 'FREE');
+  await insertResource.run(l1, 'Lecture Notes: Limits & Tangent Lines (PDF)', 'https://example.com/math-notes-01.pdf', 'PDF', 'FREE', 1);
+  await insertResource.run(l1, 'Practice Problem Set 1 (Derivatives)', 'https://example.com/math-problems-01.pdf', 'PDF', 'FREE', 1);
 
   // Lesson 2 - SUBSCRIBER ONLY
   const l2Res = await insertLesson.run(
@@ -210,10 +261,11 @@ export async function seedDatabase() {
     'https://www.youtube.com/embed/S0_qX4VJhMQ',
     24,
     'SUBSCRIBER_ONLY',
+    0,
     2
   );
   const l2 = l2Res.lastInsertRowid;
-  await insertResource.run(l2, 'Formula Sheet: Derivative Rules & Tricks', 'https://example.com/formula-sheet.pdf', 'PDF', 'SUBSCRIBER_ONLY');
+  await insertResource.run(l2, 'Formula Sheet: Derivative Rules & Tricks', 'https://example.com/formula-sheet.pdf', 'PDF', 'SUBSCRIBER_ONLY', 0);
 
   // Lesson 3 - SUBSCRIBER ONLY
   await insertLesson.run(
@@ -223,6 +275,7 @@ export async function seedDatabase() {
     'https://www.youtube.com/embed/1U40B_q_1yA',
     30,
     'SUBSCRIBER_ONLY',
+    0,
     3
   );
 
@@ -247,10 +300,11 @@ export async function seedDatabase() {
     'https://www.youtube.com/embed/kKKM8Y-u7ds',
     20,
     'FREE',
+    1,
     1
   );
   const pl1 = pl1Res.lastInsertRowid;
-  await insertResource.run(pl1, 'Guide: Drawing Free-Body Diagrams with Precision', 'https://example.com/physics-fbd.pdf', 'PDF', 'FREE');
+  await insertResource.run(pl1, 'Guide: Drawing Free-Body Diagrams with Precision', 'https://example.com/physics-fbd.pdf', 'PDF', 'FREE', 1);
 
   await insertLesson.run(
     pSec1, physCourseId, physTeacher.userId,
@@ -259,6 +313,7 @@ export async function seedDatabase() {
     'https://www.youtube.com/embed/8v_g85b5B7U',
     26,
     'SUBSCRIBER_ONLY',
+    0,
     2
   );
 
@@ -283,10 +338,11 @@ export async function seedDatabase() {
     'https://www.youtube.com/embed/D6xkbGLQesk',
     22,
     'FREE',
+    1,
     1
   );
   const csl1 = csl1Res.lastInsertRowid;
-  await insertResource.run(csl1, 'Cheatsheet: Big-O Asymptotic Notations', 'https://example.com/big-o-cheatsheet.pdf', 'PDF', 'FREE');
+  await insertResource.run(csl1, 'Cheatsheet: Big-O Asymptotic Notations', 'https://example.com/big-o-cheatsheet.pdf', 'PDF', 'FREE', 1);
 
   await insertLesson.run(
     csSec1, csCourseId, csTeacher.userId,
@@ -295,6 +351,7 @@ export async function seedDatabase() {
     'https://www.youtube.com/embed/MFhxShGxHWc',
     28,
     'SUBSCRIBER_ONLY',
+    0,
     2
   );
 
