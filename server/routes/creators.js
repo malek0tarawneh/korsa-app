@@ -18,6 +18,7 @@ router.get('/:handle', authenticateToken, async (req, res) => {
         tp.handle, tp.tier, tp.headline, tp.bio, tp.custom_bio,
         tp.external_links, tp.referral_code, tp.commission_rate,
         tp.subjects, tp.educational_levels, tp.monthly_price_cents,
+        tp.cliq_alias, tp.bank_name, tp.wallet_phone, tp.currency,
         tp.rating, tp.review_count, tp.subscriber_count, tp.is_approved
       FROM users u
       JOIN teacher_profiles tp ON u.id = tp.user_id
@@ -31,6 +32,7 @@ router.get('/:handle', authenticateToken, async (req, res) => {
           tp.handle, tp.tier, tp.headline, tp.bio, tp.custom_bio,
           tp.external_links, tp.referral_code, tp.commission_rate,
           tp.subjects, tp.educational_levels, tp.monthly_price_cents,
+          tp.cliq_alias, tp.bank_name, tp.wallet_phone, tp.currency,
           tp.rating, tp.review_count, tp.subscriber_count, tp.is_approved
         FROM users u
         JOIN teacher_profiles tp ON u.id = tp.user_id
@@ -164,11 +166,16 @@ router.get('/:handle', authenticateToken, async (req, res) => {
         custom_bio: teacher.custom_bio,
         external_links: parsedExternalLinks,
         referral_code: teacher.referral_code,
-        commission_rate: teacher.commission_rate !== null ? teacher.commission_rate : 0.10,
+        commission_rate: 0.00,
+        cliq_alias: teacher.cliq_alias || 'REEDMATH',
+        bank_name: teacher.bank_name || 'Arab Bank (البنك العربي)',
+        wallet_phone: teacher.wallet_phone || '0795551234',
+        currency: teacher.currency || 'JOD',
         subjects: JSON.parse(teacher.subjects || '[]'),
         educational_levels: JSON.parse(teacher.educational_levels || '[]'),
         monthly_price_cents: teacher.monthly_price_cents,
         monthly_price: (teacher.monthly_price_cents / 100).toFixed(2),
+        monthly_price_jod: (teacher.monthly_price_cents / 100).toFixed(0),
         rating: teacher.rating,
         review_count: teacher.review_count,
         subscriber_count: teacher.subscriber_count,
@@ -190,7 +197,8 @@ router.get('/:handle', authenticateToken, async (req, res) => {
       lead_magnets: leadMagnets,
       services: services.map(s => ({
         ...s,
-        price_dollars: (s.price_cents / 100).toFixed(2)
+        price_dollars: (s.price_cents / 100).toFixed(2),
+        price_jod: (s.price_cents / 100).toFixed(0)
       })),
       courses,
       reviews

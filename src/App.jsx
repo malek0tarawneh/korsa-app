@@ -210,7 +210,7 @@ function AppContent() {
                 <h4 style={{ color: '#ffffff', fontWeight: '700', marginBottom: '0.75rem' }}>MVP Testing Roles</h4>
                 <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <li><button onClick={() => handleOpenAuth('login')} style={{ color: '#94a3b8' }}>Student Access</button></li>
-                  <li><button onClick={() => handleOpenAuth('login')} style={{ color: '#94a3b8' }}>Teacher Studio</button></li>
+                  <li><button onClick={() => handleOpenAuth('login')} style={{ color: '#94a3b8' }}>Teacher Workspace</button></li>
                   <li><button onClick={() => handleOpenAuth('login')} style={{ color: '#94a3b8' }}>Admin Hub</button></li>
                 </ul>
               </div>
@@ -218,10 +218,10 @@ function AppContent() {
               <div>
                 <h4 style={{ color: '#ffffff', fontWeight: '700', marginBottom: '0.75rem' }}>Architecture</h4>
                 <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <li>$0 First Architecture</li>
-                  <li>Node v24 Native SQLite</li>
+                  <li>100% Free Stack</li>
+                  <li>PostgreSQL & SQLite Dual Engine</li>
                   <li>JWT + Role-Based Access</li>
-                  <li>Simulated Billing Engine</li>
+                  <li>Direct CLIQ & Wallet Payouts</li>
                 </ul>
               </div>
             </div>

@@ -4,7 +4,6 @@ import {
   Share2, 
   Copy, 
   Check, 
-  Sparkles, 
   Download, 
   ArrowLeft, 
   Star, 
@@ -12,16 +11,13 @@ import {
   BookOpen, 
   Clock, 
   CheckCircle2, 
-  ExternalLink, 
   Play, 
   Lock, 
-  MessageSquare, 
-  Globe, 
   ShieldCheck, 
   Zap,
   Calendar,
   Gift,
-  HelpCircle,
+  Phone,
   FileText
 } from 'lucide-react';
 
@@ -43,12 +39,6 @@ const TwitterIcon = ({ size = 14 }) => (
   </svg>
 );
 
-const GithubIcon = ({ size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
-  </svg>
-);
-
 export default function CreatorProfilePage({ 
   handle, 
   onBack, 
@@ -63,6 +53,7 @@ export default function CreatorProfilePage({
   
   // Modals & feedback
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCliq, setCopiedCliq] = useState(false);
   const [claimModal, setClaimModal] = useState({ isOpen: false, leadMagnet: null });
   const [claimEmail, setClaimEmail] = useState(user ? user.email : '');
   const [claimName, setClaimName] = useState(user ? user.name : '');
@@ -73,11 +64,13 @@ export default function CreatorProfilePage({
   const [bookingModal, setBookingModal] = useState({ isOpen: false, service: null });
   const [bookingName, setBookingName] = useState(user ? user.name : '');
   const [bookingEmail, setBookingEmail] = useState(user ? user.email : '');
+  const [bookingPhone, setBookingPhone] = useState('');
+  const [bookingCliqRef, setBookingCliqRef] = useState('');
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(null);
 
-  // Fetch creator profile by vanity handle
+  // Fetch creator profile by handle
   const loadCreator = async () => {
     setLoading(true);
     setError('');
@@ -93,11 +86,11 @@ export default function CreatorProfilePage({
         setCreatorData(json);
       } else {
         const errJson = await res.json();
-        setError(errJson.error || 'Creator profile not found');
+        setError(errJson.error || 'Teacher profile not found');
       }
     } catch (err) {
-      console.error('Failed to load creator:', err);
-      setError('Network error while loading creator page');
+      console.error('Failed to load teacher:', err);
+      setError('Network error while loading teacher page');
     } finally {
       setLoading(false);
     }
@@ -118,31 +111,38 @@ export default function CreatorProfilePage({
     }
   }, [user]);
 
-  // Share profile using native Web Share API with clipboard copy fallback
+  // Share profile
   const handleShareProfile = async () => {
     const url = window.location.href;
     const title = `${creatorData?.creator?.name} on Korsa`;
-    const text = `Check out ${creatorData?.creator?.name}'s free study guides and courses on Korsa!`;
+    const text = `Check out ${creatorData?.creator?.name}'s study guides and sessions on Korsa!`;
 
     if (navigator.share) {
       try {
         await navigator.share({ title, text, url });
         return;
       } catch (err) {
-        // User dismissed share dialog or fallback needed
+        // Fallback to clipboard
       }
     }
 
     try {
       await navigator.clipboard.writeText(url);
       setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 3000);
+      setTimeout(() => setCopiedLink(false), 2500);
     } catch (err) {
       console.warn('Clipboard write failed:', err);
     }
   };
 
-  // Claim free lead magnet
+  const handleCopyCliqAlias = (alias) => {
+    if (!alias) return;
+    navigator.clipboard.writeText(alias);
+    setCopiedCliq(true);
+    setTimeout(() => setCopiedCliq(false), 2500);
+  };
+
+  // Claim free study guide
   const handleClaimLeadMagnet = async (e) => {
     e.preventDefault();
     if (!claimModal.leadMagnet) return;
@@ -164,7 +164,6 @@ export default function CreatorProfilePage({
       const resData = await res.json();
       if (res.ok) {
         setClaimSuccess(resData);
-        // Refresh local download count
         setCreatorData(prev => {
           if (!prev) return prev;
           return {
@@ -175,24 +174,31 @@ export default function CreatorProfilePage({
           };
         });
       } else {
-        alert(resData.error || 'Failed to unlock guide');
+        alert(resData.error || 'Failed to download guide');
       }
     } catch (err) {
-      alert('Error unlocking free resource');
+      alert('Error downloading free study guide');
     } finally {
       setClaiming(false);
     }
   };
 
-  // Book micro-service
+  // Book 1-on-1 Session with CLIQ
   const handleBookService = async (e) => {
     e.preventDefault();
     if (!bookingModal.service) return;
 
+    if (!token) {
+      onOpenAuth('login');
+      return;
+    }
+
     setBookingSubmitting(true);
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const headers = { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` 
+      };
 
       const res = await fetch(`/api/services/${bookingModal.service.id}/book`, {
         method: 'POST',
@@ -200,6 +206,9 @@ export default function CreatorProfilePage({
         body: JSON.stringify({
           student_name: bookingName,
           student_email: bookingEmail,
+          student_phone: bookingPhone,
+          cliq_reference: bookingCliqRef,
+          payment_method: 'CLIQ',
           booking_notes: bookingNotes
         })
       });
@@ -211,7 +220,7 @@ export default function CreatorProfilePage({
         alert(resData.error || 'Failed to book session');
       }
     } catch (err) {
-      alert('Error processing booking request');
+      alert('Error submitting session booking');
     } finally {
       setBookingSubmitting(false);
     }
@@ -219,23 +228,22 @@ export default function CreatorProfilePage({
 
   if (loading) {
     return (
-      <div className="container" style={{ padding: '6rem 1rem', textAlign: 'center' }}>
-        <div style={{ display: 'inline-block', width: '40px', height: '40px', border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-        <p style={{ marginTop: '1rem', color: 'var(--color-text-muted)', fontWeight: '600' }}>Loading creator hub...</p>
+      <div className="container" style={{ padding: '5rem 1rem', textAlign: 'center' }}>
+        <p style={{ color: 'var(--color-text-muted)', fontWeight: '600' }}>Loading teacher profile...</p>
       </div>
     );
   }
 
   if (error || !creatorData || !creatorData.creator) {
     return (
-      <div className="container" style={{ padding: '5rem 1rem', textAlign: 'center', maxWidth: '520px' }}>
-        <div style={{ padding: '2rem', backgroundColor: '#fff', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '0.5rem' }}>Creator Profile Not Found</h3>
+      <div className="container" style={{ padding: '4rem 1rem', textAlign: 'center', maxWidth: '480px' }}>
+        <div style={{ padding: '2rem', backgroundColor: '#fff', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '0.5rem' }}>Teacher Not Found</h3>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            We could not locate a creator with handle <strong>@{handle}</strong>.
+            We could not locate a teacher with handle <strong>@{handle}</strong>.
           </p>
           <button onClick={onBack} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ArrowLeft size={16} /> Back to Browse
+            <ArrowLeft size={16} /> Back to Search
           </button>
         </div>
       </div>
@@ -243,334 +251,312 @@ export default function CreatorProfilePage({
   }
 
   const { creator, stats, lead_magnets, services, courses, reviews, isSubscribed } = creatorData;
-  const isExpert = creator.tier === 'expert_creator';
+  const priceJod = creator.monthly_price_jod || Math.round(parseFloat(creator.monthly_price || '10'));
+  const cliqAlias = creator.cliq_alias || 'REEDMATH';
+  const bankName = creator.bank_name || 'Arab Bank (البنك العربي)';
+  const walletPhone = creator.wallet_phone || '0795551234';
 
   return (
-    <div style={{ backgroundColor: '#f8fafc', minHeight: '100vh', paddingBottom: '5rem' }}>
+    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', paddingBottom: '5rem' }}>
       
-      {/* Top Breadcrumb & Quick Actions */}
-      <div style={{ backgroundColor: '#fff', borderBottom: '1px solid var(--color-border)', padding: '0.75rem 0' }}>
+      {/* Top Breadcrumb */}
+      <div style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)', padding: '0.75rem 0' }}>
         <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button 
             onClick={onBack} 
-            className="btn btn-secondary"
-            style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: '600' }}
           >
-            <ArrowLeft size={16} /> Explore All Teachers
+            <ArrowLeft size={15} /> All Teachers
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button 
-              onClick={handleShareProfile}
-              className="btn btn-secondary"
-              style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-            >
-              {copiedLink ? <Check size={16} color="var(--color-success)" /> : <Share2 size={16} />}
-              {copiedLink ? 'Link Copied!' : 'Share Profile'}
-            </button>
-          </div>
+          <button 
+            onClick={handleShareProfile}
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: '600' }}
+          >
+            {copiedLink ? <Check size={15} color="green" /> : <Share2 size={15} />}
+            {copiedLink ? 'Link Copied!' : 'Share Profile'}
+          </button>
         </div>
       </div>
 
-      {/* Creator Hero Header Card */}
-      <section style={{
-        background: isExpert 
-          ? 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #312e81 100%)' 
-          : 'linear-gradient(135deg, #0f172a 0%, #064e3b 100%)',
-        color: '#fff',
-        padding: '3.5rem 0 3rem 0',
-        position: 'relative',
-        overflow: 'hidden'
+      {/* Teacher Profile Header - Substack Style */}
+      <header style={{
+        borderBottom: '1px solid #e2e8f0',
+        padding: '2.5rem 0 2rem 0',
+        backgroundColor: '#ffffff'
       }}>
-        {/* Glow ambient circle */}
-        <div style={{
-          position: 'absolute',
-          top: '-10%',
-          right: '5%',
-          width: '400px',
-          height: '400px',
-          background: isExpert ? 'radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%)',
-          borderRadius: '50%',
-          pointerEvents: 'none'
-        }} />
-
-        <div className="container" style={{ maxWidth: '960px', position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
+        <div className="container" style={{ maxWidth: '840px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.5rem', flexWrap: 'wrap' }}>
             
-            {/* Avatar with Glow */}
-            <div style={{ position: 'relative' }}>
-              <img 
-                src={creator.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + creator.name} 
-                alt={creator.name}
-                style={{
-                  width: '120px',
-                  height: '120px',
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  border: isExpert ? '4px solid #818cf8' : '4px solid #34d399',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
-                }}
-              />
-              <div style={{
-                position: 'absolute',
-                bottom: '4px',
-                right: '4px',
-                backgroundColor: 'var(--color-primary)',
-                color: '#fff',
-                borderRadius: '50%',
-                width: '28px',
-                height: '28px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid #0f172a'
-              }}>
-                <ShieldCheck size={16} />
-              </div>
-            </div>
+            {/* Avatar */}
+            <img 
+              src={creator.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${creator.name}`} 
+              alt={creator.name}
+              style={{
+                width: '90px',
+                height: '90px',
+                borderRadius: '9999px',
+                objectFit: 'cover',
+                border: '3px solid #e2e8f0'
+              }}
+            />
 
-            {/* Creator Title & Meta */}
-            <div style={{ flex: 1, minWidth: '280px' }}>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
-                <h1 style={{ fontSize: '1.9rem', fontWeight: '800', letterSpacing: '-0.02em', margin: 0 }}>
+            {/* Teacher Details */}
+            <div style={{ flex: 1, minWidth: '260px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <h1 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
                   {creator.name}
                 </h1>
-                
-                {/* Vanity Handle Pill */}
-                <span style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                  padding: '0.2rem 0.6rem',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: '0.8rem',
-                  fontWeight: '700',
-                  color: '#e2e8f0',
-                  letterSpacing: '0.01em'
-                }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--color-primary)' }}>
                   @{creator.handle}
                 </span>
-
-                {/* Tier Badge */}
                 <span style={{
-                  backgroundColor: isExpert ? 'rgba(129, 140, 248, 0.25)' : 'rgba(52, 211, 153, 0.25)',
-                  color: isExpert ? '#c7d2fe' : '#a7f3d0',
-                  border: isExpert ? '1px solid rgba(129, 140, 248, 0.5)' : '1px solid rgba(52, 211, 153, 0.5)',
-                  padding: '0.2rem 0.65rem',
-                  borderRadius: 'var(--radius-full)',
                   fontSize: '0.75rem',
                   fontWeight: '700',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.3rem'
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '9999px',
+                  backgroundColor: '#eff6ff',
+                  color: '#1d4ed8'
                 }}>
-                  {isExpert ? '🌟 Expert Creator' : '🌱 Community Tutor'}
+                  Jordan
                 </span>
               </div>
 
-              <p style={{ fontSize: '1.05rem', color: '#cbd5e1', fontWeight: '500', marginBottom: '0.75rem', lineHeight: 1.4 }}>
+              <p style={{ fontSize: '1rem', color: '#475569', fontWeight: '500', marginTop: '0.35rem', marginBottom: '0.75rem', lineHeight: 1.4 }}>
                 {creator.headline}
               </p>
 
-              {/* Social Links Bar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              {/* Social Links */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                 {creator.external_links?.youtube && (
-                  <a 
-                    href={creator.external_links.youtube} 
-                    target="_blank" 
-                    rel="noreferrer" 
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#f87171', backgroundColor: 'rgba(255,255,255,0.08)', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: '600' }}
-                  >
-                    <YoutubeIcon size={14} /> YouTube
+                  <a href={creator.external_links.youtube} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#dc2626', fontSize: '0.75rem', fontWeight: '600', backgroundColor: '#fef2f2', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                    <YoutubeIcon size={13} /> YouTube
                   </a>
                 )}
                 {creator.external_links?.linkedin && (
-                  <a 
-                    href={creator.external_links.linkedin} 
-                    target="_blank" 
-                    rel="noreferrer" 
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#60a5fa', backgroundColor: 'rgba(255,255,255,0.08)', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: '600' }}
-                  >
-                    <LinkedinIcon size={14} /> LinkedIn
+                  <a href={creator.external_links.linkedin} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#0284c7', fontSize: '0.75rem', fontWeight: '600', backgroundColor: '#f0f9ff', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                    <LinkedinIcon size={13} /> LinkedIn
                   </a>
                 )}
                 {creator.external_links?.twitter && (
-                  <a 
-                    href={creator.external_links.twitter} 
-                    target="_blank" 
-                    rel="noreferrer" 
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#e2e8f0', backgroundColor: 'rgba(255,255,255,0.08)', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: '600' }}
-                  >
-                    <TwitterIcon size={14} /> X / Twitter
-                  </a>
-                )}
-                {creator.external_links?.github && (
-                  <a 
-                    href={creator.external_links.github} 
-                    target="_blank" 
-                    rel="noreferrer" 
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#e2e8f0', backgroundColor: 'rgba(255,255,255,0.08)', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: '600' }}
-                  >
-                    <GithubIcon size={14} /> GitHub
+                  <a href={creator.external_links.twitter} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#334155', fontSize: '0.75rem', fontWeight: '600', backgroundColor: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                    <TwitterIcon size={13} /> X / Twitter
                   </a>
                 )}
               </div>
 
-              {/* Stat Badges */}
-              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.825rem', color: '#94a3b8' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <Star size={15} color="#fbbf24" fill="#fbbf24" />
-                  <strong style={{ color: '#fff' }}>{creator.rating.toFixed(1)}</strong> ({creator.review_count} reviews)
+              {/* Stats Bar */}
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.825rem', color: '#64748b' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Star size={14} color="#d97706" fill="#d97706" />
+                  <strong style={{ color: '#0f172a' }}>{creator.rating?.toFixed(1) || '5.0'}</strong> ({creator.review_count} reviews)
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <Users size={15} color="#94a3b8" />
-                  <strong style={{ color: '#fff' }}>{creator.subscriber_count}</strong> Subscribers
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Users size={14} />
+                  <strong style={{ color: '#0f172a' }}>{creator.subscriber_count}</strong> Students
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <Download size={15} color="#34d399" />
-                  <strong style={{ color: '#fff' }}>{stats.total_downloads}</strong> Free Resource Downloads
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Download size={14} color="#059669" />
+                  <strong style={{ color: '#0f172a' }}>{stats?.total_downloads || 0}</strong> Free Guide Downloads
                 </span>
               </div>
 
             </div>
 
-            {/* Subscription Action Button */}
+            {/* Monthly Subscription Action Box */}
             <div style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.08)',
-              backdropFilter: 'blur(8px)',
-              borderRadius: 'var(--radius-md)',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: 'var(--radius-lg)',
               padding: '1.25rem',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
               textAlign: 'center',
-              minWidth: '220px'
+              minWidth: '200px'
             }}>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.05em' }}>
-                Full Curriculum Access
+              <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>
+                Monthly Class Access
               </div>
-              <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#fff', margin: '0.25rem 0' }}>
-                ${creator.monthly_price}<span style={{ fontSize: '0.85rem', fontWeight: '500', color: '#94a3b8' }}>/mo</span>
+              <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: '0.2rem 0' }}>
+                {priceJod} JOD<span style={{ fontSize: '0.8rem', fontWeight: '500', color: '#64748b' }}>/mo</span>
               </div>
-              <p style={{ fontSize: '0.75rem', color: '#cbd5e1', marginBottom: '0.85rem' }}>
-                Unlimited lessons & study materials
+              <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                All lessons & study materials
               </p>
 
               {isSubscribed ? (
                 <div style={{
-                  padding: '0.5rem',
-                  backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                  color: '#34d399',
+                  padding: '0.45rem',
+                  backgroundColor: '#dcfce7',
+                  color: '#15803d',
                   borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.825rem',
+                  fontSize: '0.8rem',
                   fontWeight: '700',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '0.35rem'
+                  gap: '0.3rem'
                 }}>
-                  <CheckCircle2 size={16} /> Subscribed Active
+                  <CheckCircle2 size={15} /> Enrolled Active
                 </div>
               ) : (
                 <button 
                   onClick={() => onOpenSubscribe(creator)}
                   className="btn btn-primary"
-                  style={{ width: '100%', padding: '0.6rem', fontSize: '0.9rem', fontWeight: '700' }}
+                  style={{ width: '100%', padding: '0.5rem', fontSize: '0.85rem', fontWeight: '700' }}
                 >
-                  Join for ${creator.monthly_price}/mo
+                  Join for {priceJod} JOD/mo
                 </button>
               )}
             </div>
 
           </div>
-        </div>
-      </section>
 
-      {/* Main Content Grid */}
-      <div className="container" style={{ maxWidth: '960px', marginTop: '2rem' }}>
+          {/* Local CLIQ & Wallet Payment Banner */}
+          <div style={{
+            marginTop: '1.5rem',
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.9rem 1.25rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.75rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Zap size={20} color="var(--color-primary)" />
+              <div style={{ fontSize: '0.85rem' }}>
+                <span style={{ fontWeight: '700', color: '#1e3a8a' }}>Local CLIQ & Wallet Payouts: </span>
+                <span style={{ color: '#1e40af' }}>
+                  CLIQ Alias: <strong>{cliqAlias}</strong> · Bank: <strong>{bankName}</strong> · Zain Cash: <strong>{walletPhone}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => handleCopyCliqAlias(cliqAlias)}
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: '700',
+                  padding: '0.25rem 0.6rem',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #93c5fd',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--color-primary)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem'
+                }}
+              >
+                {copiedCliq ? <Check size={12} color="green" /> : <Copy size={12} />}
+                {copiedCliq ? 'Copied' : `Copy CLIQ: ${cliqAlias}`}
+              </button>
+              <span style={{
+                fontSize: '0.7rem',
+                fontWeight: '700',
+                backgroundColor: '#dcfce7',
+                color: '#15803d',
+                padding: '0.2rem 0.5rem',
+                borderRadius: '9999px'
+              }}>
+                0% Fees
+              </span>
+            </div>
+          </div>
+
+        </div>
+      </header>
+
+      {/* Main Content Sections */}
+      <main className="container" style={{ maxWidth: '840px', marginTop: '2rem' }}>
         
-        {/* Creator Intro Bio */}
+        {/* Bio Card */}
         <div style={{
-          backgroundColor: '#fff',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1.75rem',
-          border: '1px solid var(--color-border)',
-          boxShadow: 'var(--shadow-sm)',
+          backgroundColor: '#ffffff',
+          borderRadius: 'var(--radius-md)',
+          padding: '1.5rem',
+          border: '1px solid #e2e8f0',
           marginBottom: '2rem'
         }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--color-secondary)', marginBottom: '0.6rem' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.5rem' }}>
             About {creator.name}
           </h3>
-          <p style={{ color: 'var(--color-text-main)', lineHeight: 1.65, fontSize: '0.95rem' }}>
+          <p style={{ color: '#334155', lineHeight: 1.6, fontSize: '0.925rem', margin: 0 }}>
             {creator.custom_bio || creator.bio}
           </p>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '1rem' }}>
             {creator.subjects?.map((sub, idx) => (
-              <span key={idx} className="badge badge-primary" style={{ fontSize: '0.775rem' }}>
+              <span key={idx} style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', backgroundColor: '#eff6ff', color: '#1e40af', borderRadius: '4px', fontWeight: '500' }}>
                 {sub}
               </span>
             ))}
             {creator.educational_levels?.map((lvl, idx) => (
-              <span key={idx} className="badge badge-neutral" style={{ fontSize: '0.775rem' }}>
+              <span key={idx} style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '4px', fontWeight: '500' }}>
                 {lvl}
               </span>
             ))}
           </div>
         </div>
 
-        {/* 1. FREE LEAD MAGNETS SECTION */}
-        <div style={{ marginBottom: '2.5rem' }}>
+        {/* 1. FREE STUDY GUIDES SECTION (دوسيات وتلخيصات مجانية) */}
+        <section style={{ marginBottom: '2.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <Gift size={15} /> Free Study Materials
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#059669', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                <Gift size={14} /> Free Downloads
               </div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--color-secondary)', margin: '0.2rem 0 0 0' }}>
-                Free Cheat Sheets & Roadmaps
+              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
+                Free Study Guides & Summaries (دوسيات)
               </h2>
             </div>
-            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
-              100% Free · Instant Unlock
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              100% Free · Instant Access
             </span>
           </div>
 
           {lead_magnets && lead_magnets.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
               {lead_magnets.map((lm) => (
                 <div 
                   key={lm.id}
                   style={{
-                    backgroundColor: '#fff',
-                    borderRadius: 'var(--radius-lg)',
-                    padding: '1.5rem',
-                    border: '1px solid var(--color-border)',
-                    boxShadow: 'var(--shadow-sm)',
+                    backgroundColor: '#ffffff',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1.25rem',
+                    border: '1px solid #e2e8f0',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    position: 'relative',
-                    transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                   }}
                 >
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <span style={{
                         backgroundColor: '#dcfce7',
                         color: '#15803d',
                         fontWeight: '700',
-                        fontSize: '0.75rem',
-                        padding: '0.2rem 0.6rem',
-                        borderRadius: 'var(--radius-full)'
+                        fontSize: '0.7rem',
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: '9999px'
                       }}>
-                        FREE RESOURCE
+                        FREE GUIDE
                       </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: '600' }}>
-                        🔥 {lm.downloads_count} downloads
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        {lm.downloads_count} downloads
                       </span>
                     </div>
 
-                    <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: 'var(--color-secondary)', marginBottom: '0.5rem', lineHeight: 1.35 }}>
+                    <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.35rem', lineHeight: 1.35 }}>
                       {lm.title}
                     </h4>
 
-                    <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                    <p style={{ fontSize: '0.825rem', color: '#64748b', lineHeight: 1.5, marginBottom: '1rem' }}>
                       {lm.description}
                     </p>
                   </div>
@@ -586,165 +572,165 @@ export default function CreatorProfilePage({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '0.45rem',
-                      padding: '0.6rem',
-                      fontSize: '0.875rem'
+                      gap: '0.4rem',
+                      padding: '0.5rem',
+                      fontSize: '0.825rem',
+                      fontWeight: '700'
                     }}
                   >
-                    <Download size={16} /> Download Free PDF
+                    <Download size={15} /> Download Free PDF
                   </button>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ backgroundColor: '#fff', padding: '2rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-              No downloadable resources published yet.
+            <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem' }}>
+              No study guides published yet.
             </div>
           )}
-        </div>
+        </section>
 
-        {/* 2. DIRECT MICRO-SERVICES SECTION */}
-        <div style={{ marginBottom: '2.5rem' }}>
+        {/* 2. 1-ON-1 SESSIONS & REVIEWS (حصص فردية ومراجعات) */}
+        <section style={{ marginBottom: '2.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#d97706', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <Zap size={15} /> On-Demand 1-on-1 Help
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#d97706', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                <Calendar size={14} /> Individual Tutoring
               </div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--color-secondary)', margin: '0.2rem 0 0 0' }}>
-                Micro-Tutoring & Quick Reviews
+              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
+                1-on-1 Sessions & Reviews (حصص فردية)
               </h2>
             </div>
-            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
-              No Monthly Commitment Needed
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              Pay via CLIQ / Zain Cash
             </span>
           </div>
 
           {services && services.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
-              {services.map((srv) => (
-                <div 
-                  key={srv.id}
-                  style={{
-                    backgroundColor: '#fff',
-                    borderRadius: 'var(--radius-lg)',
-                    padding: '1.5rem',
-                    border: '1px solid var(--color-border)',
-                    boxShadow: 'var(--shadow-sm)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                      <span style={{
-                        backgroundColor: srv.service_type === 'mentorship' ? '#ede9fe' : srv.service_type === 'qa_session' ? '#e0f2fe' : '#fef3c7',
-                        color: srv.service_type === 'mentorship' ? '#6d28d9' : srv.service_type === 'qa_session' ? '#0369a1' : '#b45309',
-                        fontWeight: '700',
-                        fontSize: '0.75rem',
-                        padding: '0.2rem 0.6rem',
-                        borderRadius: 'var(--radius-full)'
-                      }}>
-                        {srv.service_type === 'mentorship' ? 'Mentorship' : srv.service_type === 'qa_session' ? 'Live Q&A' : 'Quick Review'}
-                      </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+              {services.map((srv) => {
+                const srvPriceJod = srv.price_jod || Math.round(srv.price_cents / 100);
 
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <Clock size={13} /> {srv.duration_minutes} mins
-                      </span>
-                    </div>
-
-                    <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: 'var(--color-secondary)', marginBottom: '0.5rem', lineHeight: 1.35 }}>
-                      {srv.title}
-                    </h4>
-
-                    <div style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--color-primary)', marginBottom: '1.25rem' }}>
-                      ${srv.price_dollars}
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={() => {
-                      setBookingModal({ isOpen: true, service: srv });
-                      setBookingSuccess(null);
-                    }}
-                    className="btn btn-secondary"
+                return (
+                  <div 
+                    key={srv.id}
                     style={{
-                      width: '100%',
+                      backgroundColor: '#ffffff',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '1.25rem',
+                      border: '1px solid #e2e8f0',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.45rem',
-                      padding: '0.6rem',
-                      fontSize: '0.875rem',
-                      fontWeight: '700'
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
                     }}
                   >
-                    <Calendar size={16} /> Book 1-on-1 (${srv.price_dollars})
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <span style={{
+                          backgroundColor: '#fef3c7',
+                          color: '#b45309',
+                          fontWeight: '700',
+                          fontSize: '0.7rem',
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '9999px'
+                        }}>
+                          {srv.service_type === 'mentorship' ? '1-on-1 Mentorship' : srv.service_type === 'qa_session' ? 'Live Q&A' : 'Review Session'}
+                        </span>
+
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <Clock size={12} /> {srv.duration_minutes} mins
+                        </span>
+                      </div>
+
+                      <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.35rem', lineHeight: 1.35 }}>
+                        {srv.title}
+                      </h4>
+
+                      <div style={{ fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>
+                        {srvPriceJod} JOD
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        setBookingModal({ isOpen: true, service: srv });
+                        setBookingSuccess(null);
+                        setBookingCliqRef('');
+                        setBookingNotes('');
+                      }}
+                      className="btn btn-secondary"
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.4rem',
+                        padding: '0.55rem',
+                        fontSize: '0.85rem',
+                        fontWeight: '700'
+                      }}
+                    >
+                      <Calendar size={15} /> Book Session ({srvPriceJod} JOD)
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <div style={{ backgroundColor: '#fff', padding: '2rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-              No micro-services available at this time.
+            <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem' }}>
+              No 1-on-1 sessions currently offered.
             </div>
           )}
-        </div>
+        </section>
 
-        {/* 3. COURSES & FREE PREVIEW LESSONS */}
-        <div style={{ marginBottom: '2.5rem' }}>
+        {/* 3. COURSES & LESSONS */}
+        <section style={{ marginBottom: '2.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <BookOpen size={15} /> Structured Curricula
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                <BookOpen size={14} /> Curriculum
               </div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--color-secondary)', margin: '0.2rem 0 0 0' }}>
-                Courses & Free Previews
+              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
+                Courses & Sample Lessons
               </h2>
             </div>
-            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
-              {stats.course_count} Courses · {stats.free_preview_count} Free Lessons
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              {stats?.course_count || courses.length} Courses
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {courses.map((course) => (
               <div 
                 key={course.id}
                 style={{
-                  backgroundColor: '#fff',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--color-border)',
-                  overflow: 'hidden',
-                  boxShadow: 'var(--shadow-sm)'
+                  backgroundColor: '#ffffff',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid #e2e8f0',
+                  overflow: 'hidden'
                 }}
               >
-                {/* Course Header */}
-                <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--color-border)', backgroundColor: '#fcfcfd' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <div>
-                      <span className="badge badge-primary" style={{ marginBottom: '0.4rem', display: 'inline-block' }}>
-                        {course.subject_name || 'General'} · {course.educational_level}
-                      </span>
-                      <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--color-secondary)', margin: 0 }}>
-                        {course.title}
-                      </h3>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.35rem', lineHeight: 1.5 }}>
-                        {course.description}
-                      </p>
-                    </div>
-                  </div>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fcfcfd' }}>
+                  <span style={{ fontSize: '0.725rem', fontWeight: '700', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
+                    {course.subject_name || 'General'} · {course.educational_level}
+                  </span>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '2px 0 0 0' }}>
+                    {course.title}
+                  </h3>
+                  <p style={{ fontSize: '0.825rem', color: '#64748b', marginTop: '3px', margin: '3px 0 0 0' }}>
+                    {course.description}
+                  </p>
                 </div>
 
-                {/* Lessons in this course */}
-                <div style={{ padding: '1rem 1.5rem' }}>
+                <div style={{ padding: '0.75rem 1.25rem' }}>
                   {course.sections?.map((section) => (
-                    <div key={section.id} style={{ marginBottom: '1rem' }}>
-                      <h5 style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.6rem' }}>
+                    <div key={section.id} style={{ marginBottom: '0.75rem' }}>
+                      <h5 style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
                         {section.title}
                       </h5>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                         {section.lessons?.map((lesson) => {
                           const isUnlocked = !lesson.is_locked;
 
@@ -762,60 +748,59 @@ export default function CreatorProfilePage({
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                padding: '0.75rem 1rem',
-                                borderRadius: 'var(--radius-md)',
-                                backgroundColor: isUnlocked ? '#f0fdf4' : '#fff',
-                                border: isUnlocked ? '1px solid #bbf7d0' : '1px solid var(--color-border)',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
+                                padding: '0.6rem 0.85rem',
+                                borderRadius: 'var(--radius-sm)',
+                                backgroundColor: isUnlocked ? '#f0fdf4' : '#ffffff',
+                                border: isUnlocked ? '1px solid #bbf7d0' : '1px solid #f1f5f9',
+                                cursor: 'pointer'
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                                 <div style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '50%',
+                                  width: '26px',
+                                  height: '26px',
+                                  borderRadius: '9999px',
                                   backgroundColor: isUnlocked ? 'var(--color-primary)' : '#e2e8f0',
                                   color: isUnlocked ? '#fff' : '#64748b',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center'
                                 }}>
-                                  {isUnlocked ? <Play size={14} fill="#fff" /> : <Lock size={14} />}
+                                  {isUnlocked ? <Play size={12} fill="#fff" /> : <Lock size={12} />}
                                 </div>
 
                                 <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <span style={{ fontSize: '0.9rem', fontWeight: '600', color: isUnlocked ? 'var(--color-secondary)' : 'var(--color-text-main)' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: '600', color: isUnlocked ? '#0f172a' : '#475569' }}>
                                       {lesson.title}
                                     </span>
                                     {lesson.is_free_preview && (
                                       <span style={{
                                         backgroundColor: '#dcfce7',
                                         color: '#16a34a',
-                                        fontSize: '0.675rem',
+                                        fontSize: '0.65rem',
                                         fontWeight: '800',
-                                        padding: '0.1rem 0.45rem',
-                                        borderRadius: 'var(--radius-full)'
+                                        padding: '0.05rem 0.35rem',
+                                        borderRadius: '9999px'
                                       }}>
                                         FREE SAMPLE
                                       </span>
                                     )}
                                   </div>
-                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                    {lesson.duration_minutes} mins · {lesson.resources?.length || 0} attachments
+                                  <span style={{ fontSize: '0.725rem', color: '#64748b' }}>
+                                    {lesson.duration_minutes} mins
                                   </span>
                                 </div>
                               </div>
 
                               <div>
                                 {isUnlocked ? (
-                                  <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                                    Watch Now →
+                                  <span style={{ fontSize: '0.775rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                                    Watch →
                                   </span>
                                 ) : (
-                                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text-muted)' }}>
-                                    Subscriber Only
+                                  <span style={{ fontSize: '0.725rem', fontWeight: '600', color: '#94a3b8' }}>
+                                    Locked
                                   </span>
                                 )}
                               </div>
@@ -826,62 +811,53 @@ export default function CreatorProfilePage({
                     </div>
                   ))}
                 </div>
-
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* 4. STUDENT REVIEWS */}
+        {/* 4. REVIEWS */}
         {reviews && reviews.length > 0 && (
-          <div style={{ marginBottom: '2.5rem' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-secondary)', marginBottom: '1rem' }}>
-              Student Reviews & Endorsements
+          <section style={{ marginBottom: '2.5rem' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.75rem' }}>
+              Student Feedback
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
               {reviews.map((rev) => (
                 <div 
                   key={rev.id}
                   style={{
-                    backgroundColor: '#fff',
+                    backgroundColor: '#ffffff',
                     borderRadius: 'var(--radius-md)',
-                    padding: '1.25rem',
-                    border: '1px solid var(--color-border)',
-                    boxShadow: 'var(--shadow-sm)'
+                    padding: '1rem',
+                    border: '1px solid #e2e8f0'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <img 
-                        src={rev.student_avatar || 'https://api.dicebear.com/7.x/initials/svg?seed=' + rev.student_name}
-                        alt={rev.student_name}
-                        style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-                      />
-                      <span style={{ fontSize: '0.85rem', fontWeight: '700' }}>{rev.student_name}</span>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                    <span style={{ fontSize: '0.825rem', fontWeight: '700', color: '#0f172a' }}>{rev.student_name}</span>
                     <div style={{ display: 'flex' }}>
                       {[...Array(5)].map((_, i) => (
                         <Star 
                           key={i} 
-                          size={13} 
-                          color="#fbbf24" 
-                          fill={i < rev.rating ? '#fbbf24' : 'transparent'} 
+                          size={12} 
+                          color="#d97706" 
+                          fill={i < rev.rating ? '#d97706' : 'transparent'} 
                         />
                       ))}
                     </div>
                   </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--color-text-main)', lineHeight: 1.5, fontStyle: 'italic', margin: 0 }}>
+                  <p style={{ fontSize: '0.825rem', color: '#475569', lineHeight: 1.5, margin: 0 }}>
                     "{rev.comment}"
                   </p>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
-      </div>
+      </main>
 
-      {/* LEAD MAGNET CLAIM MODAL */}
+      {/* FREE STUDY GUIDE CLAIM MODAL */}
       {claimModal.isOpen && claimModal.leadMagnet && (
         <div style={{
           position: 'fixed',
@@ -889,8 +865,7 @@ export default function CreatorProfilePage({
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.65)',
-          backdropFilter: 'blur(4px)',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -898,35 +873,34 @@ export default function CreatorProfilePage({
           padding: '1rem'
         }}>
           <div style={{
-            backgroundColor: '#fff',
+            backgroundColor: '#ffffff',
             borderRadius: 'var(--radius-lg)',
-            maxWidth: '460px',
+            maxWidth: '440px',
             width: '100%',
-            padding: '2rem',
-            position: 'relative',
-            boxShadow: 'var(--shadow-lg)'
+            padding: '1.75rem',
+            position: 'relative'
           }}>
             
             {claimSuccess ? (
-              <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-                <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
-                  <CheckCircle2 size={32} />
+              <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+                <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                  <CheckCircle2 size={28} />
                 </div>
-                <h3 style={{ fontSize: '1.35rem', fontWeight: '800', marginBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '0.4rem' }}>
                   Download Ready!
                 </h3>
-                <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>
                   {claimSuccess.message}
                 </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <a 
                     href={claimSuccess.file_url} 
                     target="_blank" 
                     rel="noreferrer"
                     className="btn btn-primary"
-                    style={{ padding: '0.75rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    style={{ padding: '0.65rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
                   >
-                    <Download size={18} /> Open & Download PDF
+                    <Download size={16} /> Open & Download PDF
                   </a>
                   <button 
                     onClick={() => setClaimModal({ isOpen: false, leadMagnet: null })}
@@ -938,25 +912,25 @@ export default function CreatorProfilePage({
               </div>
             ) : (
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', marginBottom: '0.25rem' }}>
-                  <Gift size={16} /> FREE CHEAT SHEET UNLOCK
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                  <Gift size={14} /> FREE STUDY GUIDE
                 </div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-secondary)', marginBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.4rem' }}>
                   {claimModal.leadMagnet.title}
                 </h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                  Enter your email below for immediate free access. You will also follow {creator.name} for free lesson updates.
+                <p style={{ fontSize: '0.825rem', color: '#64748b', marginBottom: '1rem', lineHeight: 1.5 }}>
+                  Enter your email to receive immediate access to this free study guide from {creator.name}.
                 </p>
 
-                <form onSubmit={handleClaimLeadMagnet} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <form onSubmit={handleClaimLeadMagnet} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: '600', marginBottom: '0.35rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.25rem' }}>
                       Your Name
                     </label>
                     <input 
                       type="text"
                       className="form-input"
-                      placeholder="e.g. Alex Smith"
+                      placeholder="e.g. Ahmad Tariq"
                       value={claimName}
                       onChange={(e) => setClaimName(e.target.value)}
                       required
@@ -964,20 +938,20 @@ export default function CreatorProfilePage({
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: '600', marginBottom: '0.35rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.25rem' }}>
                       Email Address
                     </label>
                     <input 
                       type="email"
                       className="form-input"
-                      placeholder="you@school.edu"
+                      placeholder="you@email.com"
                       value={claimEmail}
                       onChange={(e) => setClaimEmail(e.target.value)}
                       required
                     />
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                     <button 
                       type="button" 
                       onClick={() => setClaimModal({ isOpen: false, leadMagnet: null })} 
@@ -990,9 +964,9 @@ export default function CreatorProfilePage({
                       type="submit" 
                       className="btn btn-primary" 
                       disabled={claiming}
-                      style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                      style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
                     >
-                      {claiming ? 'Unlocking...' : <><Download size={16} /> Get Free Guide</>}
+                      {claiming ? 'Downloading...' : <><Download size={15} /> Get Free PDF</>}
                     </button>
                   </div>
                 </form>
@@ -1003,7 +977,7 @@ export default function CreatorProfilePage({
         </div>
       )}
 
-      {/* BOOKING MODAL */}
+      {/* 1-ON-1 BOOKING MODAL WITH CLIQ & CONFIRMATION CARD */}
       {bookingModal.isOpen && bookingModal.service && (
         <div style={{
           position: 'fixed',
@@ -1011,8 +985,7 @@ export default function CreatorProfilePage({
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.65)',
-          backdropFilter: 'blur(4px)',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -1020,30 +993,84 @@ export default function CreatorProfilePage({
           padding: '1rem'
         }}>
           <div style={{
-            backgroundColor: '#fff',
+            backgroundColor: '#ffffff',
             borderRadius: 'var(--radius-lg)',
             maxWidth: '480px',
             width: '100%',
-            padding: '2rem',
-            position: 'relative',
-            boxShadow: 'var(--shadow-lg)'
+            padding: '1.75rem',
+            position: 'relative'
           }}>
             
             {bookingSuccess ? (
-              <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-                <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+              /* CLEAN CONFIRMATION CARD (Pending Confirmation) */
+              <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
                   <CheckCircle2 size={32} />
                 </div>
-                <h3 style={{ fontSize: '1.35rem', fontWeight: '800', marginBottom: '0.5rem' }}>
-                  Session Reserved!
+                
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.25rem' }}>
+                  Booking Request Received!
                 </h3>
-                <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                  {bookingSuccess.message}
+                
+                {/* Pending Confirmation Badge */}
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  backgroundColor: '#fef3c7',
+                  color: '#92400e',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  padding: '0.25rem 0.75rem',
+                  borderRadius: '9999px',
+                  marginBottom: '1.25rem'
+                }}>
+                  <Clock size={14} /> Pending Teacher Confirmation
+                </div>
+
+                {/* Transfer Summary Card */}
+                <div style={{
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '1rem',
+                  textAlign: 'left',
+                  fontSize: '0.85rem',
+                  marginBottom: '1.25rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.4rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Teacher:</span>
+                    <strong style={{ color: '#0f172a' }}>{creator.name}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Teacher CLIQ Alias:</span>
+                    <strong style={{ color: 'var(--color-primary)' }}>{cliqAlias}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Total Amount:</span>
+                    <strong style={{ color: '#0f172a', fontSize: '0.95rem' }}>
+                      {bookingSuccess.booking?.price_jod || Math.round(bookingModal.service.price_cents / 100)} JOD
+                    </strong>
+                  </div>
+                  {bookingCliqRef && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748b' }}>Your CLIQ Ref:</span>
+                      <strong style={{ fontFamily: 'monospace' }}>{bookingCliqRef}</strong>
+                    </div>
+                  )}
+                </div>
+
+                <p style={{ fontSize: '0.825rem', color: '#64748b', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                  {creator.name} will verify the CLIQ transfer in their banking app and confirm your session. You can track this under <strong>My Bookings</strong>.
                 </p>
+
                 <button 
                   onClick={() => setBookingModal({ isOpen: false, service: null })}
                   className="btn btn-primary"
-                  style={{ width: '100%', padding: '0.65rem' }}
+                  style={{ width: '100%', padding: '0.65rem', fontWeight: '700' }}
                 >
                   Done
                 </button>
@@ -1051,24 +1078,50 @@ export default function CreatorProfilePage({
             ) : (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                  <span style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                    Direct 1-on-1 Booking
+                  <span style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                    1-on-1 Session Booking
                   </span>
-                  <span style={{ fontWeight: '800', fontSize: '1.1rem', color: 'var(--color-secondary)' }}>
-                    ${bookingModal.service.price_dollars}
+                  <span style={{ fontWeight: '800', fontSize: '1.1rem', color: '#0f172a' }}>
+                    {bookingModal.service.price_jod || Math.round(bookingModal.service.price_cents / 100)} JOD
                   </span>
                 </div>
 
-                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-secondary)', marginBottom: '0.25rem' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.2rem' }}>
                   {bookingModal.service.title}
                 </h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
-                  {bookingModal.service.duration_minutes} minutes live session with {creator.name}.
+                <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1rem' }}>
+                  {bookingModal.service.duration_minutes} minutes direct session with {creator.name}.
                 </p>
 
-                <form onSubmit={handleBookService} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                {/* CLIQ Payout Instructions Card */}
+                <div style={{
+                  backgroundColor: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.85rem',
+                  fontSize: '0.825rem',
+                  marginBottom: '1rem'
+                }}>
+                  <div style={{ fontWeight: '700', color: '#1e3a8a', marginBottom: '0.35rem' }}>
+                    1. Send {bookingModal.service.price_jod || Math.round(bookingModal.service.price_cents / 100)} JOD via CLIQ or Zain Cash:
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                    <span style={{ color: '#475569' }}>Teacher CLIQ Alias:</span>
+                    <strong style={{ color: 'var(--color-primary)' }}>{cliqAlias}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                    <span style={{ color: '#475569' }}>Bank Name:</span>
+                    <strong>{bankName}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#475569' }}>Zain Cash / Orange:</span>
+                    <strong>{walletPhone}</strong>
+                  </div>
+                </div>
+
+                <form onSubmit={handleBookService} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: '600', marginBottom: '0.35rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.2rem' }}>
                       Student Name
                     </label>
                     <input 
@@ -1081,34 +1134,66 @@ export default function CreatorProfilePage({
                     />
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: '600', marginBottom: '0.35rem' }}>
-                      Email Address (Where meeting link will be sent)
-                    </label>
-                    <input 
-                      type="email"
-                      className="form-input"
-                      placeholder="you@school.edu"
-                      value={bookingEmail}
-                      onChange={(e) => setBookingEmail(e.target.value)}
-                      required
-                    />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.2rem' }}>
+                        Email
+                      </label>
+                      <input 
+                        type="email"
+                        className="form-input"
+                        placeholder="you@email.com"
+                        value={bookingEmail}
+                        onChange={(e) => setBookingEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.2rem' }}>
+                        Phone / WhatsApp
+                      </label>
+                      <input 
+                        type="tel"
+                        className="form-input"
+                        placeholder="079XXXXXXX"
+                        value={bookingPhone}
+                        onChange={(e) => setBookingPhone(e.target.value)}
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: '600', marginBottom: '0.35rem' }}>
-                      Topic or Questions for {creator.name}
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.2rem' }}>
+                      CLIQ Transfer Reference Number
+                    </label>
+                    <input 
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. CLIQ-12345678 or Bank Receipt #"
+                      value={bookingCliqRef}
+                      onChange={(e) => setBookingCliqRef(e.target.value)}
+                      required
+                    />
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginTop: '2px' }}>
+                      Enter the reference number from your banking or wallet transfer confirmation.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.2rem' }}>
+                      Topic or Questions (Optional)
                     </label>
                     <textarea 
                       className="form-input"
-                      rows={3}
-                      placeholder="Describe the homework problems, test questions, or topics you'd like to review..."
+                      rows={2}
+                      placeholder="What exam topics or homework questions do you want to cover?"
                       value={bookingNotes}
                       onChange={(e) => setBookingNotes(e.target.value)}
                     />
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
                     <button 
                       type="button" 
                       onClick={() => setBookingModal({ isOpen: false, service: null })} 
@@ -1121,9 +1206,9 @@ export default function CreatorProfilePage({
                       type="submit" 
                       className="btn btn-primary" 
                       disabled={bookingSubmitting}
-                      style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                      style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: '700' }}
                     >
-                      {bookingSubmitting ? 'Confirming...' : `Confirm Booking ($${bookingModal.service.price_dollars})`}
+                      {bookingSubmitting ? 'Submitting...' : `Submit Booking (${bookingModal.service.price_jod || Math.round(bookingModal.service.price_cents / 100)} JOD)`}
                     </button>
                   </div>
                 </form>

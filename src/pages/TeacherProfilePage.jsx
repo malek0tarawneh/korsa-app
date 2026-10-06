@@ -205,21 +205,26 @@ export default function TeacherProfilePage({
               textAlign: 'center'
             }}>
               <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: '600' }}>
-                DIRECT SUBSCRIPTION
+                MONTHLY ENROLLMENT
               </div>
               <div style={{ margin: '0.5rem 0' }}>
-                <span style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                  ${teacher.monthly_price}
+                <span style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
+                  {teacher.monthly_price_jod || Math.round(parseFloat(teacher.monthly_price || '10'))} JOD
                 </span>
                 <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}> / month</span>
               </div>
+              {teacher.cliq_alias && (
+                <div style={{ fontSize: '0.775rem', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '0.5rem', backgroundColor: '#eff6ff', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                  CLIQ: {teacher.cliq_alias} (0% Fee)
+                </div>
+              )}
               <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
                 Access all current & future courses, worksheets, and updates from {teacher.name}.
               </p>
 
               {isSubscribed ? (
                 <div className="alert alert-success" style={{ margin: 0, justifyContent: 'center', fontSize: '0.875rem' }}>
-                  <CheckCircle2 size={16} /> Subscribed & Unlocked
+                  <CheckCircle2 size={16} /> Enrolled & Unlocked
                 </div>
               ) : (
                 <button
@@ -231,9 +236,9 @@ export default function TeacherProfilePage({
                     }
                   }}
                   className="btn btn-primary"
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', fontWeight: '700' }}
                 >
-                  <Sparkles size={16} /> Subscribe — ${teacher.monthly_price}/mo
+                  Join Class ({teacher.monthly_price_jod || Math.round(parseFloat(teacher.monthly_price || '10'))} JOD/mo)
                 </button>
               )}
             </div>

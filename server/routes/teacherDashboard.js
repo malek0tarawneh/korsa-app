@@ -179,17 +179,24 @@ router.get('/overview', requireRole('teacher'), async (req, res) => {
         subjects: JSON.parse(profile.subjects || '[]'),
         educational_levels: JSON.parse(profile.educational_levels || '[]'),
         external_links: parsedExternalLinks,
-        commission_rate: profile.commission_rate !== null ? profile.commission_rate : 0.10
+        commission_rate: 0.00,
+        cliq_alias: profile.cliq_alias || 'REEDMATH',
+        bank_name: profile.bank_name || 'Arab Bank (البنك العربي)',
+        wallet_phone: profile.wallet_phone || '0795551234',
+        currency: profile.currency || 'JOD'
       },
       stats: {
         active_subscribers: activeSubscribers,
         subscription_price: (monthlyPriceCents / 100).toFixed(2),
+        subscription_price_jod: (monthlyPriceCents / 100).toFixed(0),
         gross_monthly_revenue: (grossMonthlyRevenueCents / 100).toFixed(2),
-        platform_commission_percent: Math.round(standardCommissionRate * 100),
-        platform_commission_amount: (platformCommissionCents / 100).toFixed(2),
-        estimated_teacher_earnings: (estimatedTeacherEarningsCents / 100).toFixed(2),
-        self_referred_commission_percent: Math.round(selfReferredCommissionRate * 100),
-        self_referred_take_rate: 97,
+        gross_monthly_revenue_jod: (grossMonthlyRevenueCents / 100).toFixed(0),
+        platform_commission_percent: 0,
+        platform_commission_amount: '0.00',
+        estimated_teacher_earnings: (grossMonthlyRevenueCents / 100).toFixed(2),
+        estimated_teacher_earnings_jod: (grossMonthlyRevenueCents / 100).toFixed(0),
+        self_referred_commission_percent: 0,
+        self_referred_take_rate: 100,
         total_courses: courses.length,
         total_lead_magnets: leadMagnets.length,
         total_downloads: leadMagnets.reduce((acc, lm) => acc + Number(lm.downloads_count || 0), 0),
@@ -201,8 +208,10 @@ router.get('/overview', requireRole('teacher'), async (req, res) => {
       payments: payments.map(p => ({
         ...p,
         amount: (p.amount_cents / 100).toFixed(2),
-        platform_commission: (p.platform_commission_cents / 100).toFixed(2),
-        teacher_earnings: (p.teacher_earnings_cents / 100).toFixed(2)
+        amount_jod: (p.amount_cents / 100).toFixed(0),
+        platform_commission: '0.00',
+        teacher_earnings: (p.amount_cents / 100).toFixed(2),
+        teacher_earnings_jod: (p.amount_cents / 100).toFixed(0)
       })),
       courses: courses.map(c => ({
         ...c,
@@ -212,11 +221,17 @@ router.get('/overview', requireRole('teacher'), async (req, res) => {
       lead_magnets: leadMagnets,
       services: services.map(s => ({
         ...s,
-        price_dollars: (s.price_cents / 100).toFixed(2)
+        price_dollars: (s.price_cents / 100).toFixed(2),
+        price_jod: (s.price_cents / 100).toFixed(0)
       })),
       service_bookings: serviceBookings.map(sb => ({
         ...sb,
-        price_dollars: (sb.price_cents / 100).toFixed(2)
+        price_dollars: (sb.price_cents / 100).toFixed(2),
+        price_jod: (sb.price_cents / 100).toFixed(0),
+        payment_status: sb.payment_status || 'pending_confirmation',
+        cliq_reference: sb.cliq_reference || '',
+        student_phone: sb.student_phone || '',
+        payment_method: sb.payment_method || 'CLIQ'
       }))
     });
   } catch (error) {
@@ -237,11 +252,15 @@ router.post('/settings', requireRole('teacher'), async (req, res) => {
       handle, 
       tier, 
       referral_code, 
-      external_links 
+      external_links,
+      cliq_alias,
+      bank_name,
+      wallet_phone,
+      currency
     } = req.body;
 
     if (monthly_price_cents && parseInt(monthly_price_cents) < 100) {
-      return res.status(400).json({ error: 'Price must be at least $1.00' });
+      return res.status(400).json({ error: 'Price must be at least 1 JOD' });
     }
 
     // Handle uniqueness validation if handle provided
@@ -278,7 +297,11 @@ router.post('/settings', requireRole('teacher'), async (req, res) => {
           handle = COALESCE(?, handle),
           tier = COALESCE(?, tier),
           referral_code = COALESCE(?, referral_code),
-          external_links = COALESCE(?, external_links)
+          external_links = COALESCE(?, external_links),
+          cliq_alias = COALESCE(?, cliq_alias),
+          bank_name = COALESCE(?, bank_name),
+          wallet_phone = COALESCE(?, wallet_phone),
+          currency = COALESCE(?, currency, 'JOD')
       WHERE user_id = ?
     `).run(
       headline !== undefined ? headline : null,
@@ -289,13 +312,67 @@ router.post('/settings', requireRole('teacher'), async (req, res) => {
       tier || null,
       cleanRefCode,
       linksString,
+      cliq_alias !== undefined ? cliq_alias.trim() : null,
+      bank_name !== undefined ? bank_name.trim() : null,
+      wallet_phone !== undefined ? wallet_phone.trim() : null,
+      currency || 'JOD',
       teacherId
     );
 
-    res.json({ success: true, message: 'Creator profile & settings updated successfully' });
+    res.json({ success: true, message: 'Teacher profile, CLIQ payment details & settings saved successfully' });
   } catch (error) {
     console.error('Update teacher settings error:', error);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Confirm student payment via CLIQ / Zain Cash
+router.put('/service-bookings/:id/confirm-payment', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const bookingId = parseInt(req.params.id);
+
+    const booking = await db.prepare('SELECT id FROM service_bookings WHERE id = ? AND teacher_id = ?').get(bookingId, teacherId);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or access denied' });
+    }
+
+    await db.prepare(`
+      UPDATE service_bookings
+      SET status = 'confirmed', payment_status = 'confirmed'
+      WHERE id = ? AND teacher_id = ?
+    `).run(bookingId, teacherId);
+
+    res.json({ success: true, message: 'Payment confirmed! Session is now confirmed.' });
+  } catch (error) {
+    console.error('Confirm payment error:', error);
+    res.status(500).json({ error: 'Failed to confirm payment' });
+  }
+});
+
+// Update booking status or notes
+router.put('/service-bookings/:id', requireRole('teacher'), async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const bookingId = parseInt(req.params.id);
+    const { status, payment_status } = req.body;
+
+    const booking = await db.prepare('SELECT id FROM service_bookings WHERE id = ? AND teacher_id = ?').get(bookingId, teacherId);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or access denied' });
+    }
+
+    await db.prepare(`
+      UPDATE service_bookings
+      SET status = COALESCE(?, status),
+          payment_status = COALESCE(?, payment_status)
+      WHERE id = ? AND teacher_id = ?
+    `).run(status || null, payment_status || null, bookingId, teacherId);
+
+    res.json({ success: true, message: 'Booking updated' });
+  } catch (error) {
+    console.error('Update booking error:', error);
+    res.status(500).json({ error: 'Failed to update booking' });
   }
 });
 

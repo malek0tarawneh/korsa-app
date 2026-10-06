@@ -14,6 +14,7 @@ router.get('/', async (req, res) => {
         u.id, u.name, u.avatar_url,
         tp.handle, tp.tier, tp.headline, tp.bio, tp.custom_bio, tp.referral_code, tp.subjects, tp.educational_levels,
         tp.monthly_price_cents, tp.rating, tp.review_count, tp.subscriber_count,
+        tp.cliq_alias, tp.bank_name, tp.wallet_phone, tp.currency,
         (SELECT COUNT(*) FROM courses WHERE teacher_id = u.id AND is_published = 1) as course_count,
         (SELECT COUNT(*) FROM lead_magnets WHERE teacher_id = u.id) as lead_magnet_count,
         (SELECT COUNT(*) FROM lessons WHERE teacher_id = u.id AND (is_free_preview = 1 OR access_level = 'FREE') AND is_published = 1) as free_sample_count,
@@ -53,7 +54,12 @@ router.get('/', async (req, res) => {
       service_count: Number(t.service_count || 0),
       subjects: JSON.parse(t.subjects || '[]'),
       educational_levels: JSON.parse(t.educational_levels || '[]'),
-      monthly_price: (t.monthly_price_cents / 100).toFixed(2)
+      monthly_price: (t.monthly_price_cents / 100).toFixed(2),
+      monthly_price_jod: (t.monthly_price_cents / 100).toFixed(0),
+      currency: t.currency || 'JOD',
+      cliq_alias: t.cliq_alias || 'REEDMATH',
+      bank_name: t.bank_name || 'Arab Bank (البنك العربي)',
+      wallet_phone: t.wallet_phone || '0795551234'
     }));
 
     res.json(formattedTeachers);
@@ -73,8 +79,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const teacher = await db.prepare(`
       SELECT 
         u.id, u.name, u.avatar_url,
-        tp.headline, tp.bio, tp.subjects, tp.educational_levels,
+        tp.handle, tp.tier, tp.headline, tp.bio, tp.subjects, tp.educational_levels,
         tp.monthly_price_cents, tp.rating, tp.review_count, tp.subscriber_count,
+        tp.cliq_alias, tp.bank_name, tp.wallet_phone, tp.currency,
         tp.is_approved, u.created_at
       FROM users u
       JOIN teacher_profiles tp ON u.id = tp.user_id
@@ -192,7 +199,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
         ...teacher,
         subjects: JSON.parse(teacher.subjects || '[]'),
         educational_levels: JSON.parse(teacher.educational_levels || '[]'),
-        monthly_price: (teacher.monthly_price_cents / 100).toFixed(2)
+        monthly_price: (teacher.monthly_price_cents / 100).toFixed(2),
+        monthly_price_jod: (teacher.monthly_price_cents / 100).toFixed(0),
+        currency: teacher.currency || 'JOD',
+        cliq_alias: teacher.cliq_alias || 'REEDMATH',
+        bank_name: teacher.bank_name || 'Arab Bank (البنك العربي)',
+        wallet_phone: teacher.wallet_phone || '0795551234'
       },
       isSubscribed,
       subscriptionDetails,

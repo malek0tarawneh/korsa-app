@@ -201,7 +201,11 @@ const POSTGRES_SCHEMA = `
     custom_bio TEXT,
     external_links TEXT DEFAULT '{}',
     referral_code TEXT UNIQUE,
-    commission_rate DOUBLE PRECISION DEFAULT 0.10,
+    commission_rate DOUBLE PRECISION DEFAULT 0.00,
+    cliq_alias TEXT,
+    bank_name TEXT,
+    wallet_phone TEXT,
+    currency TEXT DEFAULT 'JOD',
     subjects TEXT NOT NULL,
     educational_levels TEXT NOT NULL,
     monthly_price_cents INTEGER NOT NULL DEFAULT 500,
@@ -295,9 +299,13 @@ const POSTGRES_SCHEMA = `
     student_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     student_name TEXT NOT NULL,
     student_email TEXT NOT NULL,
+    student_phone TEXT,
+    cliq_reference TEXT,
+    payment_method TEXT DEFAULT 'CLIQ',
+    payment_status TEXT NOT NULL DEFAULT 'pending_confirmation',
     booking_notes TEXT,
     price_cents INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'confirmed',
+    status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -413,7 +421,11 @@ const SQLITE_SCHEMA = `
     custom_bio TEXT,
     external_links TEXT DEFAULT '{}',
     referral_code TEXT UNIQUE,
-    commission_rate REAL DEFAULT 0.10,
+    commission_rate REAL DEFAULT 0.00,
+    cliq_alias TEXT,
+    bank_name TEXT,
+    wallet_phone TEXT,
+    currency TEXT DEFAULT 'JOD',
     subjects TEXT NOT NULL,
     educational_levels TEXT NOT NULL,
     monthly_price_cents INTEGER NOT NULL DEFAULT 500,
@@ -520,9 +532,13 @@ const SQLITE_SCHEMA = `
     student_id INTEGER,
     student_name TEXT NOT NULL,
     student_email TEXT NOT NULL,
+    student_phone TEXT,
+    cliq_reference TEXT,
+    payment_method TEXT DEFAULT 'CLIQ',
+    payment_status TEXT NOT NULL DEFAULT 'pending_confirmation',
     booking_notes TEXT,
     price_cents INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'confirmed',
+    status TEXT NOT NULL DEFAULT 'pending',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
     FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -653,7 +669,22 @@ export async function populateCreatorFlywheelDefaults() {
         github: handle === 'tariq' ? `https://github.com/${handle}` : null
       });
 
-      const customBio = `Welcome to my learning hub! I publish weekly high-yield lessons, comprehensive study guides, and direct 1-on-1 micro-tutoring sessions for motivated students.`;
+      const customBio = `Welcome to my learning hub! I publish free study guides, Tawjihi cheat sheets, and direct 1-on-1 review sessions. Direct payments via CLIQ & Zain Cash in JOD.`;
+
+      // Jordanian CLIQ & Wallet defaults
+      const jordanianPayouts = {
+        jordan: { cliq_alias: 'REEDMATH', bank_name: 'Arab Bank (البنك العربي)', wallet_phone: '0795551234' },
+        elena: { cliq_alias: 'ELENACS', bank_name: 'Bank al Etihad (بنك الاتحاد)', wallet_phone: '0772223456' },
+        marcus: { cliq_alias: 'MARCUSCHEM', bank_name: 'Housing Bank (بنك الإسكان)', wallet_phone: '0789998877' },
+        sarah: { cliq_alias: 'SARAHENG', bank_name: 'Jordan Kuwait Bank (الأردني الكويتي)', wallet_phone: '0791112233' },
+        tariq: { cliq_alias: 'TARIQPHYS', bank_name: 'Capital Bank (كابيتال بنك)', wallet_phone: '0786667788' }
+      };
+
+      const payout = jordanianPayouts[handle] || {
+        cliq_alias: `${handle.toUpperCase()}CLIQ`,
+        bank_name: 'Arab Bank (البنك العربي)',
+        wallet_phone: '0791234567'
+      };
 
       await db.prepare(`
         UPDATE teacher_profiles
@@ -662,23 +693,27 @@ export async function populateCreatorFlywheelDefaults() {
             tier = ?,
             custom_bio = COALESCE(custom_bio, ?),
             external_links = COALESCE(external_links, ?),
-            commission_rate = COALESCE(commission_rate, 0.10)
+            commission_rate = 0.00,
+            cliq_alias = COALESCE(cliq_alias, ?),
+            bank_name = COALESCE(bank_name, ?),
+            wallet_phone = COALESCE(wallet_phone, ?),
+            currency = 'JOD'
         WHERE user_id = ?
-      `).run(handle, referralCode, tier, customBio, externalLinks, t.user_id);
+      `).run(handle, referralCode, tier, customBio, externalLinks, payout.cliq_alias, payout.bank_name, payout.wallet_phone, t.user_id);
 
-      // Seed default lead magnets if none exist
+      // Seed default free study guides if none exist
       const lmCount = await db.prepare('SELECT COUNT(*) as count FROM lead_magnets WHERE teacher_id = ?').get(t.user_id);
       if (Number(lmCount?.count || 0) === 0) {
         const lastName = t.name.split(' ').pop();
         const leadMagnetsList = [
           {
-            title: `${lastName}’s Ultimate Exam Revision Roadmap & Formula Sheet`,
-            description: 'Comprehensive high-yield cheat sheet covering top recurring exam pitfalls, key theorems, and step-by-step problem-solving shortcuts.',
+            title: `${lastName}’s Exam Revision Roadmap & Formula Sheet`,
+            description: 'Comprehensive high-yield cheat sheet covering recurring exam questions, key formulas, and step-by-step problem-solving shortcuts.',
             file_url: 'https://example.com/assets/cheat-sheet-roadmap.pdf',
             downloads_count: 248 + (t.user_id * 15)
           },
           {
-            title: 'Top 50 High-Yield Exam Questions with Fully Worked Solutions',
+            title: 'Top 50 Tawjihi Exam Questions with Worked Solutions',
             description: 'Curated collection of challenging exam problems analyzed line-by-line so you can master exam timing and score maximization.',
             file_url: 'https://example.com/assets/top-50-exam-solutions.pdf',
             downloads_count: 142 + (t.user_id * 8)
@@ -693,25 +728,25 @@ export async function populateCreatorFlywheelDefaults() {
         }
       }
 
-      // Seed default micro-services if none exist
+      // Seed default 1-on-1 sessions if none exist
       const sCount = await db.prepare('SELECT COUNT(*) as count FROM services WHERE teacher_id = ?').get(t.user_id);
       if (Number(sCount?.count || 0) === 0) {
         const defaultServices = [
           {
             title: '15-Minute Homework & Concept Checkup',
-            price_cents: 1000,
+            price_cents: 500, // 5 JOD
             duration_minutes: 15,
             service_type: 'quick_review'
           },
           {
             title: '30-Minute Live 1-on-1 Q&A / Exam Drill',
-            price_cents: 2000,
+            price_cents: 1000, // 10 JOD
             duration_minutes: 30,
             service_type: 'qa_session'
           },
           {
             title: '60-Minute Comprehensive Mentorship & Strategy',
-            price_cents: 4500,
+            price_cents: 2000, // 20 JOD
             duration_minutes: 60,
             service_type: 'mentorship'
           }
@@ -747,7 +782,17 @@ export async function initDatabase() {
             ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS custom_bio TEXT;
             ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS external_links TEXT DEFAULT '{}';
             ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS referral_code TEXT;
-            ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS commission_rate DOUBLE PRECISION DEFAULT 0.10;
+            ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS commission_rate DOUBLE PRECISION DEFAULT 0.00;
+            ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS cliq_alias TEXT;
+            ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS bank_name TEXT;
+            ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS wallet_phone TEXT;
+            ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'JOD';
+          END IF;
+          IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'service_bookings') THEN
+            ALTER TABLE service_bookings ADD COLUMN IF NOT EXISTS cliq_reference TEXT;
+            ALTER TABLE service_bookings ADD COLUMN IF NOT EXISTS student_phone TEXT;
+            ALTER TABLE service_bookings ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'CLIQ';
+            ALTER TABLE service_bookings ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending_confirmation';
           END IF;
           IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'lessons') THEN
             ALTER TABLE lessons ADD COLUMN IF NOT EXISTS is_free_preview INTEGER DEFAULT 0;
@@ -799,7 +844,15 @@ export async function initDatabase() {
       addCol('teacher_profiles', 'custom_bio', 'TEXT');
       addCol('teacher_profiles', 'external_links', "TEXT DEFAULT '{}'");
       addCol('teacher_profiles', 'referral_code', 'TEXT');
-      addCol('teacher_profiles', 'commission_rate', 'REAL DEFAULT 0.10');
+      addCol('teacher_profiles', 'commission_rate', 'REAL DEFAULT 0.00');
+      addCol('teacher_profiles', 'cliq_alias', 'TEXT');
+      addCol('teacher_profiles', 'bank_name', 'TEXT');
+      addCol('teacher_profiles', 'wallet_phone', 'TEXT');
+      addCol('teacher_profiles', 'currency', "TEXT DEFAULT 'JOD'");
+      addCol('service_bookings', 'cliq_reference', 'TEXT');
+      addCol('service_bookings', 'student_phone', 'TEXT');
+      addCol('service_bookings', 'payment_method', "TEXT DEFAULT 'CLIQ'");
+      addCol('service_bookings', 'payment_status', "TEXT DEFAULT 'pending_confirmation'");
       addCol('lessons', 'is_free_preview', 'INTEGER DEFAULT 0');
       addCol('resources', 'is_free_preview', 'INTEGER DEFAULT 0');
     } catch (err) {
@@ -841,14 +894,16 @@ export async function initDatabase() {
   // Populate creator flywheel defaults (handles, tiers, lead magnets, services)
   await populateCreatorFlywheelDefaults();
 
-  // Default platform settings
+  // Default platform settings (0% platform cut - completely free operation)
   const checkSetting = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_commission_percentage');
   if (!checkSetting) {
     await db.prepare('INSERT INTO platform_settings (key, value, description) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING').run(
       'platform_commission_percentage',
-      '20',
-      'Platform commission cut on subscription revenue (e.g. 20%)'
+      '0',
+      'Platform commission cut (0% - 100% free direct CLIQ & Wallet payments)'
     );
+  } else {
+    await db.prepare('UPDATE platform_settings SET value = ? WHERE key = ?').run('0', 'platform_commission_percentage');
   }
 
   const currentPlatformName = await db.prepare('SELECT value FROM platform_settings WHERE key = ?').get('platform_name');

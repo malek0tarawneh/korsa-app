@@ -1,89 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
-  BookOpen, 
-  CreditCard, 
+  Download, 
+  Clock, 
   CheckCircle2, 
-  ArrowRight, 
-  AlertTriangle,
-  Play,
-  RotateCcw,
-  Receipt,
-  Sparkles,
-  Calendar,
-  CheckCircle,
-  ExternalLink,
-  Download,
-  Share2,
-  Copy,
-  Gift,
-  Clock,
-  MessageSquare,
-  FileText,
-  UserCheck,
+  Calendar, 
+  FileText, 
+  ArrowRight,
+  BookOpen,
+  User,
+  Zap,
   Check
 } from 'lucide-react';
 
-export default function StudentDashboard({ onSelectTeacher, onOpenLesson }) {
-  const { user, token, refreshUser } = useAuth();
-  const [activeTab, setActiveTab] = useState('progress'); // 'progress' | 'downloads' | 'services' | 'referrals' | 'subscriptions' | 'ledger'
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [progressCourses, setProgressCourses] = useState([]);
-  const [ledgerPayments, setLedgerPayments] = useState([]);
+export default function StudentDashboard({ onSelectTeacher, onSelectCreator, onOpenLesson }) {
+  const { user, token } = useAuth();
+  const [activeTab, setActiveTab] = useState('guides'); // 'guides' | 'bookings'
   const [claimedDownloads, setClaimedDownloads] = useState([]);
   const [serviceBookings, setServiceBookings] = useState([]);
-  const [referralStats, setReferralStats] = useState(null);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionMessage, setActionMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      // 1. Fetch subscriptions
-      const subRes = await fetch('/api/subscriptions/my', { headers });
-      if (subRes.ok) {
-        const subs = await subRes.json();
-        setSubscriptions(subs);
-      }
-
-      // 2. Fetch learning progress
-      const progRes = await fetch('/api/progress/my', { headers });
-      if (progRes.ok) {
-        const prog = await progRes.json();
-        setProgressCourses(prog);
-      }
-
-      // 3. Fetch simulated invoices ledger
-      const ledgerRes = await fetch('/api/subscriptions/my/ledger', { headers });
-      if (ledgerRes.ok) {
-        const ledger = await ledgerRes.json();
-        setLedgerPayments(ledger);
-      }
-
-      // 4. Fetch claimed lead magnets
+      // 1. Fetch free claimed study guides
       const leadRes = await fetch('/api/lead-magnets/my-claimed', { headers });
       if (leadRes.ok) {
         const leads = await leadRes.json();
         setClaimedDownloads(leads);
       }
 
-      // 5. Fetch booked micro-services
+      // 2. Fetch booked 1-on-1 sessions
       const srvRes = await fetch('/api/services/my-bookings', { headers });
       if (srvRes.ok) {
         const srv = await srvRes.json();
         setServiceBookings(srv);
       }
 
-      // 6. Fetch referral statistics
-      const refRes = await fetch('/api/referrals/stats', { headers });
-      if (refRes.ok) {
-        const refs = await refRes.json();
-        setReferralStats(refs);
+      // 3. Fetch active subscriptions (for curriculum access)
+      const subRes = await fetch('/api/subscriptions/my', { headers });
+      if (subRes.ok) {
+        const subs = await subRes.json();
+        setSubscriptions(subs);
       }
     } catch (err) {
       console.error('Failed to load student dashboard:', err);
@@ -96,978 +57,371 @@ export default function StudentDashboard({ onSelectTeacher, onOpenLesson }) {
     if (token) loadData();
   }, [token]);
 
-  const handleCopyLink = () => {
-    const link = referralStats?.referral_link || `${window.location.origin}/?ref=${referralStats?.referral_code || ''}`;
-    navigator.clipboard.writeText(link);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2500);
-  };
-
-  const handleCopyCode = () => {
-    if (referralStats?.referral_code) {
-      navigator.clipboard.writeText(referralStats.referral_code);
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2500);
-    }
-  };
-
-  const handleShareNative = async () => {
-    const link = referralStats?.referral_link || `${window.location.origin}/?ref=${referralStats?.referral_code || ''}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Join me on Korsa - Free Creator Learning',
-          text: `Join Korsa using my invite code ${referralStats?.referral_code} and get instant free access to cheat sheets, courses, and creator workshops!`,
-          url: link
-        });
-      } catch {
-        handleCopyLink();
-      }
-    } else {
-      handleCopyLink();
-    }
-  };
-
-  const handleCancelSub = async (subId) => {
-    if (!window.confirm('Cancel this subscription? You will retain access until the renewal date.')) return;
-    setActionMessage('');
-    setErrorMessage('');
-    try {
-      const res = await fetch(`/api/subscriptions/cancel/${subId}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (res.ok) {
-        setActionMessage('Subscription successfully cancelled.');
-        await refreshUser();
-        loadData();
-      } else {
-        const err = await res.json();
-        setErrorMessage(err.error || 'Failed to cancel subscription');
-      }
-    } catch (err) {
-      setErrorMessage('Network error cancelling subscription');
-    }
-  };
-
-  const handleReactivateSub = async (subId) => {
-    setActionMessage('');
-    setErrorMessage('');
-    try {
-      const res = await fetch(`/api/subscriptions/reactivate/${subId}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (res.ok) {
-        setActionMessage('Subscription reactivated! Simulated renewal recorded.');
-        await refreshUser();
-        loadData();
-      } else {
-        const err = await res.json();
-        setErrorMessage(err.error || 'Failed to reactivate subscription');
-      }
-    } catch (err) {
-      setErrorMessage('Network error reactivating subscription');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="container" style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-        Loading your learning dashboard...
-      </div>
-    );
-  }
-
-  const activeSubs = subscriptions.filter(s => s.status === 'active');
-  const pastSubs = subscriptions.filter(s => s.status !== 'active');
-  const friendsCount = referralStats?.referred_count || 0;
-  const referralTarget = 3;
-  const progressPercent = Math.min(100, Math.round((friendsCount / referralTarget) * 100));
-
   return (
-    <div style={{ padding: '2.5rem 0 5rem 0' }}>
-      <div className="container">
+    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', padding: '2.5rem 0 5rem 0' }}>
+      <div className="container" style={{ maxWidth: '840px' }}>
         
-        {/* Welcome Banner */}
+        {/* Simple Page Header */}
         <div style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
-            <span className="badge badge-role student">STUDENT CLASSROOM</span>
-            <span className="badge" style={{ backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
-              FREE EXPLORER MODE
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
+            <span style={{
+              fontSize: '0.75rem',
+              fontWeight: '700',
+              padding: '0.15rem 0.5rem',
+              borderRadius: '9999px',
+              backgroundColor: '#eff6ff',
+              color: '#1d4ed8'
+            }}>
+              STUDENT DASHBOARD
             </span>
-            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{user?.email}</span>
-            {user?.referred_by && (
-              <span className="badge" style={{ backgroundColor: '#f3e8ff', color: '#7e22ce' }}>
-                Referred by {user.referred_by}
-              </span>
-            )}
+            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>{user?.email}</span>
           </div>
-          <h1 style={{ fontSize: '1.85rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
             Welcome back, {user?.name}
           </h1>
-          <p style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-            Track your progress across courses, access free lead magnets, attend booked sessions, and earn rewards.
+          <p style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '4px' }}>
+            Manage your free downloadable study guides and your 1-on-1 session bookings.
           </p>
         </div>
 
-        {/* Global Notifications */}
-        {actionMessage && (
-          <div className="alert alert-success" style={{ marginBottom: '1.5rem' }}>
-            <CheckCircle2 size={18} /> {actionMessage}
-          </div>
-        )}
-        {errorMessage && (
-          <div className="alert alert-error" style={{ marginBottom: '1.5rem' }}>
-            <AlertTriangle size={18} /> {errorMessage}
-          </div>
-        )}
-
-        {/* VIRAL FLYWHEEL REFERRAL WIDGET BANNER */}
-        <div style={{
-          background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%)',
-          color: '#ffffff',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1.5rem 1.75rem',
-          marginBottom: '2rem',
-          boxShadow: '0 10px 25px -5px rgba(49, 46, 129, 0.25)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ maxWidth: '650px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#ffffff', border: 'none' }}>
-                  <Gift size={13} style={{ marginRight: '4px' }} /> VIRAL REFERRAL FLYWHEEL
-                </span>
-                <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
-                  Balance: <strong>{referralStats?.referral_credits || user?.referral_credits || 0} credits</strong>
-                </span>
-              </div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#ffffff', margin: 0 }}>
-                Invite 3 Friends, Unlock Full Free Masterclass Access!
-              </h2>
-              <p style={{ fontSize: '0.875rem', color: '#cbd5e1', marginTop: '4px', lineHeight: 1.5 }}>
-                Share your personal code with classmates. Every student who registers gets 10 credits, and you earn 10 credits plus instant tier upgrades.
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <button
-                onClick={handleCopyCode}
-                className="btn btn-secondary btn-sm"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.15)',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  backdropFilter: 'blur(4px)'
-                }}
-              >
-                {copiedCode ? <Check size={14} color="#86efac" /> : <Copy size={14} />}
-                Code: <strong style={{ letterSpacing: '0.5px' }}>{referralStats?.referral_code || 'CODE'}</strong>
-              </button>
-
-              <button
-                onClick={handleCopyLink}
-                className="btn btn-primary btn-sm"
-                style={{
-                  backgroundColor: '#ffffff',
-                  color: '#312e81',
-                  border: 'none',
-                  fontWeight: '700'
-                }}
-              >
-                {copiedLink ? <Check size={14} color="#059669" /> : <Share2 size={14} />}
-                {copiedLink ? 'Link Copied!' : 'Copy Invite Link'}
-              </button>
-
-              <button
-                onClick={handleShareNative}
-                className="btn btn-sm"
-                style={{
-                  backgroundColor: '#4f46e5',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.3)'
-                }}
-                title="Share directly"
-              >
-                Share
-              </button>
-            </div>
-          </div>
-
-          {/* Progress toward 3 friends */}
-          <div style={{
-            backgroundColor: 'rgba(0,0,0,0.2)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.85rem 1rem'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.825rem' }}>
-              <span style={{ color: '#e2e8f0', fontWeight: '600' }}>
-                Milestone Progress: {friendsCount} of {referralTarget} classmates joined
-              </span>
-              <span style={{ color: friendsCount >= referralTarget ? '#86efac' : '#cbd5e1', fontWeight: '700' }}>
-                {friendsCount >= referralTarget ? '🎉 Reward Unlocked!' : `${referralTarget - friendsCount} more needed`}
-              </span>
-            </div>
-            <div style={{ height: '8px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '999px', overflow: 'hidden' }}>
-              <div 
-                style={{ 
-                  height: '100%', 
-                  width: `${progressPercent}%`, 
-                  background: 'linear-gradient(90deg, #10b981 0%, #34d399 100%)',
-                  borderRadius: '999px',
-                  transition: 'width 0.4s ease'
-                }} 
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
+        {/* ULTRA-SIMPLE TWO TABS */}
         <div style={{
           display: 'flex',
-          gap: '0.5rem',
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: '2px solid #e2e8f0',
           marginBottom: '2rem',
-          overflowX: 'auto',
-          whiteSpace: 'nowrap'
+          gap: '1.5rem'
         }}>
           <button
-            onClick={() => setActiveTab('progress')}
+            onClick={() => setActiveTab('guides')}
             style={{
-              padding: '0.75rem 1.1rem',
-              fontWeight: activeTab === 'progress' ? '700' : '500',
-              color: activeTab === 'progress' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'progress' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              padding: '0.75rem 0.25rem',
+              fontSize: '1rem',
+              fontWeight: activeTab === 'guides' ? '800' : '600',
+              color: activeTab === 'guides' ? 'var(--color-primary)' : '#64748b',
+              borderBottom: activeTab === 'guides' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              marginBottom: '-2px',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.4rem'
+              gap: '0.45rem',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
             }}
           >
-            <BookOpen size={16} /> My Courses ({progressCourses.length})
+            <Download size={18} />
+            My Free Guides ({claimedDownloads.length})
           </button>
+
           <button
-            onClick={() => setActiveTab('downloads')}
+            onClick={() => setActiveTab('bookings')}
             style={{
-              padding: '0.75rem 1.1rem',
-              fontWeight: activeTab === 'downloads' ? '700' : '500',
-              color: activeTab === 'downloads' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'downloads' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              padding: '0.75rem 0.25rem',
+              fontSize: '1rem',
+              fontWeight: activeTab === 'bookings' ? '800' : '600',
+              color: activeTab === 'bookings' ? 'var(--color-primary)' : '#64748b',
+              borderBottom: activeTab === 'bookings' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              marginBottom: '-2px',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.4rem'
+              gap: '0.45rem',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
             }}
           >
-            <Download size={16} /> Free Cheat Sheets & Guides ({claimedDownloads.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('services')}
-            style={{
-              padding: '0.75rem 1.1rem',
-              fontWeight: activeTab === 'services' ? '700' : '500',
-              color: activeTab === 'services' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'services' ? '2px solid var(--color-primary)' : '2px solid transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem'
-            }}
-          >
-            <Clock size={16} /> Booked Micro-Services ({serviceBookings.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('referrals')}
-            style={{
-              padding: '0.75rem 1.1rem',
-              fontWeight: activeTab === 'referrals' ? '700' : '500',
-              color: activeTab === 'referrals' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'referrals' ? '2px solid var(--color-primary)' : '2px solid transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem'
-            }}
-          >
-            <Gift size={16} /> Referral Hub ({friendsCount})
-          </button>
-          <button
-            onClick={() => setActiveTab('subscriptions')}
-            style={{
-              padding: '0.75rem 1.1rem',
-              fontWeight: activeTab === 'subscriptions' ? '700' : '500',
-              color: activeTab === 'subscriptions' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'subscriptions' ? '2px solid var(--color-primary)' : '2px solid transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem'
-            }}
-          >
-            <CreditCard size={16} /> Subscriptions ({activeSubs.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('ledger')}
-            style={{
-              padding: '0.75rem 1.1rem',
-              fontWeight: activeTab === 'ledger' ? '700' : '500',
-              color: activeTab === 'ledger' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'ledger' ? '2px solid var(--color-primary)' : '2px solid transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem'
-            }}
-          >
-            <Receipt size={16} /> Invoices ({ledgerPayments.length})
+            <Calendar size={18} />
+            My Bookings ({serviceBookings.length})
           </button>
         </div>
 
-        {/* TAB 1: LEARNING PROGRESS & RESUME WATCHING */}
-        {activeTab === 'progress' && (
+        {/* Loading State */}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#64748b' }}>
+            Loading dashboard...
+          </div>
+        ) : (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            
+            {/* TAB 1: MY FREE GUIDES */}
+            {activeTab === 'guides' && (
               <div>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                  Course Progress
-                </h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: 0 }}>
-                  Includes free sample lessons and full subscribed curriculum.
-                </p>
-              </div>
-              <button onClick={() => onSelectTeacher(null)} className="btn btn-secondary btn-sm">
-                + Browse Teachers & Free Samples
-              </button>
-            </div>
-
-            {progressCourses.length === 0 ? (
-              <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
-                <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>You haven't started any lessons yet.</p>
-                <button onClick={() => onSelectTeacher(null)} className="btn btn-primary btn-sm">
-                  Explore Teachers & Free Samples
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
-                {progressCourses.map((c) => (
-                  <div key={c.course_id} className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                        <span className="badge" style={{ backgroundColor: '#eff6ff', color: 'var(--color-primary)' }}>
-                          {c.educational_level}
-                        </span>
-                        <span style={{ fontSize: '0.875rem', fontWeight: '800', color: c.percentage === 100 ? 'var(--color-accent)' : 'var(--color-primary)' }}>
-                          {c.percentage}% completed
-                        </span>
-                      </div>
-
-                      <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '0.4rem' }}>
-                        {c.course_title}
-                      </h3>
-
-                      <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
-                        Teacher: <strong>{c.teacher_name}</strong>
-                      </p>
-
-                      {/* Progress Bar */}
-                      <div className="progress-bar-container" style={{ marginBottom: '1.25rem' }}>
-                        <div 
-                          className="progress-bar-fill" 
-                          style={{ 
-                            width: `${c.percentage}%`,
-                            backgroundColor: c.percentage === 100 ? 'var(--color-accent)' : 'var(--color-primary)'
-                          }} 
-                        />
-                      </div>
-
-                      {/* Last Watched Lesson */}
-                      {c.last_lesson_title && (
-                        <div style={{
-                          backgroundColor: '#f8fafc',
-                          padding: '0.75rem 1rem',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--color-border)',
-                          marginBottom: '1.25rem'
-                        }}>
-                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>
-                            Last Watched
-                          </span>
-                          <div style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--color-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <Play size={13} fill="currentColor" color="var(--color-primary)" />
-                            {c.last_lesson_title}
-                          </div>
-                        </div>
-                      )}
+                {claimedDownloads.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '3.5rem 1rem',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#eff6ff', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                      <Download size={24} />
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                        {c.completed_lessons} of {c.total_lessons} lessons finished
-                      </span>
-
-                      <button 
-                        onClick={() => onSelectTeacher(c.teacher_id)}
-                        className="btn btn-primary btn-sm"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                      >
-                        Resume Learning <ArrowRight size={14} />
-                      </button>
-                    </div>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.4rem' }}>
+                      No study guides downloaded yet
+                    </h3>
+                    <p style={{ fontSize: '0.875rem', color: '#64748b', maxWidth: '420px', margin: '0 auto 1.5rem auto', lineHeight: 1.5 }}>
+                      Browse Jordanian teachers to download free Tawjihi summaries, exam roadmaps, and cheat sheets.
+                    </p>
+                    <button 
+                      onClick={() => onSelectTeacher(null)} 
+                      className="btn btn-primary btn-md"
+                      style={{ fontWeight: '700' }}
+                    >
+                      Find Teachers & Free Guides
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 2: CLAIMED FREE DOWNLOADS & CHEAT SHEETS */}
-        {activeTab === 'downloads' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                  My Free Study Resources & Lead Magnets ({claimedDownloads.length})
-                </h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: 0 }}>
-                  High-yield cheat sheets, exam roadmaps, and summary PDF templates you unlocked from top creators.
-                </p>
-              </div>
-            </div>
-
-            {claimedDownloads.length === 0 ? (
-              <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
-                <FileText size={40} color="var(--color-text-muted)" style={{ margin: '0 auto 1rem auto' }} />
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '700', marginBottom: '0.5rem' }}>No downloads claimed yet</h3>
-                <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.25rem', maxWidth: '450px', margin: '0 auto 1.25rem auto' }}>
-                  Explore teacher profiles to claim free formula sheets, revision checklists, and coding guides without paying a cent.
-                </p>
-                <button onClick={() => onSelectTeacher(null)} className="btn btn-primary btn-sm">
-                  Browse Free Creator Resources
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
-                {claimedDownloads.map((lead) => (
-                  <div key={lead.claim_id || lead.id} className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <img
-                          src={lead.teacher_avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${lead.teacher_name}`}
-                          alt={lead.teacher_name}
-                          style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-full)', objectFit: 'cover' }}
-                        />
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem' }}>
+                    {claimedDownloads.map((guide) => (
+                      <div 
+                        key={guide.claim_id || guide.id}
+                        style={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 'var(--radius-md)',
+                          padding: '1.25rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                        }}
+                      >
                         <div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: '700' }}>{lead.teacher_name}</div>
-                          {lead.teacher_handle && (
-                            <a
-                              href={`/@${lead.teacher_handle}`}
-                              style={{ fontSize: '0.75rem', color: 'var(--color-primary)', textDecoration: 'none' }}
-                            >
-                              @{lead.teacher_handle}
-                            </a>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span style={{
+                              fontSize: '0.7rem',
+                              fontWeight: '700',
+                              padding: '0.1rem 0.45rem',
+                              borderRadius: '9999px',
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d'
+                            }}>
+                              DOWNLOAD READY
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                              {guide.claimed_at ? new Date(guide.claimed_at).toLocaleDateString() : 'Available'}
+                            </span>
+                          </div>
+
+                          <h4 style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.35rem', lineHeight: 1.35 }}>
+                            {guide.title}
+                          </h4>
+
+                          <p style={{ fontSize: '0.8rem', color: '#64748b', lineHeight: 1.45, marginBottom: '0.75rem' }}>
+                            {guide.description}
+                          </p>
+
+                          {guide.teacher_name && (
+                            <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <User size={13} /> By <strong>{guide.teacher_name}</strong>
+                            </div>
                           )}
                         </div>
-                        <span className="badge badge-free" style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>CLAIMED</span>
-                      </div>
 
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '0.4rem', color: 'var(--color-secondary)' }}>
-                        {lead.title}
-                      </h3>
-                      <p style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', lineHeight: 1.5, marginBottom: '1rem' }}>
-                        {lead.description || 'Exclusive study guide curated by the creator.'}
-                      </p>
-                    </div>
-
-                    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        Claimed {lead.claimed_at ? new Date(lead.claimed_at).toLocaleDateString() : 'Recently'}
-                      </span>
-
-                      <a
-                        href={lead.file_url || '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-primary btn-sm"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}
-                      >
-                        <Download size={14} /> Download File
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 3: BOOKED MICRO-SERVICES */}
-        {activeTab === 'services' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                  Booked Micro-Services & 1-on-1 Sessions ({serviceBookings.length})
-                </h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: 0 }}>
-                  Quick portfolio checkups, code reviews, and live Q&A sessions booked with tutors.
-                </p>
-              </div>
-              <button onClick={() => onSelectTeacher(null)} className="btn btn-secondary btn-sm">
-                + Book Another Service
-              </button>
-            </div>
-
-            {serviceBookings.length === 0 ? (
-              <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
-                <Clock size={40} color="var(--color-text-muted)" style={{ margin: '0 auto 1rem auto' }} />
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '700', marginBottom: '0.5rem' }}>No sessions booked yet</h3>
-                <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.25rem', maxWidth: '450px', margin: '0 auto 1.25rem auto' }}>
-                  Need fast feedback on an assignment or personal coaching? Creators offer $5 to $25 micro-sessions with quick turnaround.
-                </p>
-                <button onClick={() => onSelectTeacher(null)} className="btn btn-primary btn-sm">
-                  Find Micro-Tutoring Sessions
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {serviceBookings.map((b) => (
-                  <div
-                    key={b.id}
-                    className="card"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '1.5rem',
-                      flexWrap: 'wrap',
-                      gap: '1rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                      <img
-                        src={b.teacher_avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${b.teacher_name}`}
-                        alt={b.teacher_name}
-                        style={{ width: '52px', height: '52px', borderRadius: 'var(--radius-full)', objectFit: 'cover' }}
-                      />
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                          <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: 0 }}>{b.title}</h3>
-                          <span className="badge badge-free" style={{ textTransform: 'uppercase' }}>
-                            {b.status || 'CONFIRMED'}
-                          </span>
-                          <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.725rem' }}>
-                            {b.service_type?.replace('_', ' ')}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                          Teacher: <strong>{b.teacher_name}</strong> {b.teacher_handle && `(@${b.teacher_handle})`} • Duration: {b.duration_minutes || 20} mins
-                        </p>
-                        {b.student_notes && (
-                          <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>
-                            Notes: "{b.student_notes}"
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                          ${(b.price_cents / 100).toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                          Booked on {b.created_at ? new Date(b.created_at).toLocaleDateString() : 'Recently'}
-                        </div>
-                      </div>
-
-                      {b.teacher_handle && (
-                        <a
-                          href={`/@${b.teacher_handle}`}
-                          className="btn btn-secondary btn-sm"
-                          style={{ textDecoration: 'none' }}
+                        <a 
+                          href={guide.file_url} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="btn btn-primary"
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.4rem',
+                            padding: '0.55rem',
+                            fontSize: '0.85rem',
+                            fontWeight: '700',
+                            textDecoration: 'none'
+                          }}
                         >
-                          View Creator Profile
+                          <Download size={15} /> Download PDF
                         </a>
-                      )}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* TAB 4: REFERRAL HUB & VIRAL PERKS */}
-        {activeTab === 'referrals' && (
-          <div>
-            <div style={{ marginBottom: '1.75rem' }}>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                Invite Friends & Earn Free Masterclasses
-              </h2>
-              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                Share Korsa with friends, study groups, and classmates. Both of you get rewarded instantly!
-              </p>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-              
-              {/* Share link card */}
-              <div className="card" style={{ padding: '1.75rem' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
-                  Your Personal Invite Link
-                </span>
-                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: '0.5rem 0 1rem 0' }}>
-                  Send this link to anyone. When they sign up, your account gets credited automatically.
-                </p>
-
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  backgroundColor: '#f8fafc',
-                  padding: '0.6rem 0.85rem',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                  marginBottom: '1rem'
-                }}>
-                  <input
-                    type="text"
-                    readOnly
-                    value={referralStats?.referral_link || `${window.location.origin}/?ref=${referralStats?.referral_code || ''}`}
-                    style={{
-                      border: 'none',
-                      backgroundColor: 'transparent',
-                      width: '100%',
-                      fontSize: '0.85rem',
-                      color: 'var(--color-secondary)',
-                      outline: 'none',
-                      fontFamily: 'monospace'
-                    }}
-                  />
-                  <button
-                    onClick={handleCopyLink}
-                    className="btn btn-primary btn-sm"
-                    style={{ padding: '0.35rem 0.65rem', flexShrink: 0 }}
-                  >
-                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={handleShareNative} className="btn btn-primary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                    <Share2 size={14} /> Native Share
-                  </button>
-                  <button onClick={handleCopyCode} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    {copiedCode ? <Check size={14} /> : <Copy size={14} />} Copy Code
-                  </button>
-                </div>
-              </div>
-
-              {/* Milestones Card */}
-              <div className="card" style={{ padding: '1.75rem' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--color-accent)', textTransform: 'uppercase' }}>
-                  Reward Milestones
-                </span>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', marginTop: '0.3rem', marginBottom: '0.75rem' }}>
-                  Community Flywheel Tiers
-                </h3>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem' }}>
-                    <div style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      backgroundColor: friendsCount >= 1 ? '#10b981' : '#e2e8f0',
-                      color: friendsCount >= 1 ? '#ffffff' : '#64748b',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.75rem',
-                      fontWeight: '800',
-                      flexShrink: 0
-                    }}>
-                      1
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '700', fontSize: '0.875rem' }}>1 Friend Joined</div>
-                      <div style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>+10 free credits + unlock bonus starter cheat sheet</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem' }}>
-                    <div style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      backgroundColor: friendsCount >= 3 ? '#10b981' : '#e2e8f0',
-                      color: friendsCount >= 3 ? '#ffffff' : '#64748b',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.75rem',
-                      fontWeight: '800',
-                      flexShrink: 0
-                    }}>
-                      3
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '700', fontSize: '0.875rem' }}>3 Friends Joined (Unlocked!)</div>
-                      <div style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>Full access to premium community courses and live QA</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem' }}>
-                    <div style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      backgroundColor: friendsCount >= 5 ? '#10b981' : '#e2e8f0',
-                      color: friendsCount >= 5 ? '#ffffff' : '#64748b',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.75rem',
-                      fontWeight: '800',
-                      flexShrink: 0
-                    }}>
-                      5
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '700', fontSize: '0.875rem' }}>5 Friends Joined</div>
-                      <div style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>1 Free 1-on-1 micro-tutoring session coupon ($25 value)</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Friends list */}
-            {referralStats?.friends && referralStats.friends.length > 0 && (
-              <div className="card" style={{ padding: '1.5rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                  Invited Friends ({referralStats.friends.length})
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {referralStats.friends.map((f, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0', borderBottom: '1px solid var(--color-border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <UserCheck size={16} color="var(--color-accent)" />
-                        <span style={{ fontWeight: '600', fontSize: '0.875rem' }}>{f.name}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({f.email})</span>
-                      </div>
-                      <span className="badge badge-free" style={{ fontSize: '0.7rem' }}>+10 CREDITS</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 5: ACTIVE & PAST SUBSCRIPTIONS */}
-        {activeTab === 'subscriptions' && (
-          <div>
-            {/* Active Subscriptions */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                  Active Teacher Subscriptions ({activeSubs.length})
-                </h2>
-                <button onClick={() => onSelectTeacher(null)} className="btn btn-secondary btn-sm">
-                  + Find More Teachers
-                </button>
-              </div>
-
-              {activeSubs.length === 0 ? (
-                <div className="card" style={{ padding: '2.5rem', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>You have no active teacher subscriptions.</p>
-                  <button onClick={() => onSelectTeacher(null)} className="btn btn-primary btn-sm">
-                    Browse Teachers
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {activeSubs.map((sub) => (
-                    <div 
-                      key={sub.id} 
-                      className="card"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '1.5rem',
-                        flexWrap: 'wrap',
-                        gap: '1rem'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                        <img 
-                          src={sub.teacher_avatar} 
-                          alt={sub.teacher_name}
-                          style={{ width: '56px', height: '56px', borderRadius: 'var(--radius-full)', objectFit: 'cover' }}
-                        />
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                            <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>{sub.teacher_name}</h3>
-                            <span className="badge badge-free">ACTIVE</span>
-                          </div>
-                          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                            {sub.teacher_headline}
-                          </p>
-                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
-                            {sub.teacher_subjects.map((s, i) => (
-                              <span key={i} className="badge" style={{ backgroundColor: '#eff6ff', color: '#1e40af', fontSize: '0.725rem' }}>
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                            ${sub.price} / mo
-                          </div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end' }}>
-                            <Calendar size={13} />
-                            Renews: {sub.renewal_at?.split(' ')[0] || 'Next Month'}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button 
-                            onClick={() => onSelectTeacher(sub.teacher_id)}
-                            className="btn btn-primary btn-sm"
-                          >
-                            Open Classroom
-                          </button>
-                          <button 
-                            onClick={() => handleCancelSub(sub.id)}
-                            className="btn btn-danger btn-sm"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Past / Cancelled Subscriptions */}
-            {pastSubs.length > 0 && (
+            {/* TAB 2: MY BOOKINGS */}
+            {activeTab === 'bookings' && (
               <div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
-                  Cancelled Subscriptions ({pastSubs.length})
+                {serviceBookings.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '3.5rem 1rem',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                      <Calendar size={24} />
+                    </div>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.4rem' }}>
+                      No 1-on-1 sessions booked yet
+                    </h3>
+                    <p style={{ fontSize: '0.875rem', color: '#64748b', maxWidth: '420px', margin: '0 auto 1.5rem auto', lineHeight: 1.5 }}>
+                      Schedule individual tutoring or homework review sessions directly with teachers in Jordan via CLIQ.
+                    </p>
+                    <button 
+                      onClick={() => onSelectTeacher(null)} 
+                      className="btn btn-primary btn-md"
+                      style={{ fontWeight: '700' }}
+                    >
+                      Browse Teachers to Book
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {serviceBookings.map((b) => {
+                      const isConfirmed = b.payment_status === 'confirmed' || b.status === 'confirmed';
+                      const priceJod = b.price_jod || Math.round(b.price_cents / 100);
+
+                      return (
+                        <div 
+                          key={b.id}
+                          style={{
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 'var(--radius-md)',
+                            padding: '1.25rem',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                                  {b.service_title}
+                                </h3>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                  ({b.duration_minutes} mins)
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.85rem', color: '#475569' }}>
+                                Teacher: <strong>{b.teacher_name}</strong> (@{b.teacher_handle})
+                              </div>
+                            </div>
+
+                            {/* Status Badge */}
+                            <div>
+                              {isConfirmed ? (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '9999px',
+                                  backgroundColor: '#dcfce7',
+                                  color: '#15803d',
+                                  fontSize: '0.8rem',
+                                  fontWeight: '700'
+                                }}>
+                                  <CheckCircle2 size={14} /> Confirmed (مؤكد)
+                                </span>
+                              ) : (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '9999px',
+                                  backgroundColor: '#fef3c7',
+                                  color: '#b45309',
+                                  fontSize: '0.8rem',
+                                  fontWeight: '700'
+                                }}>
+                                  <Clock size={14} /> Pending Confirmation (قيد التأكيد)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* CLIQ Payment Details Card */}
+                          <div style={{
+                            backgroundColor: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '0.85rem 1rem',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                            gap: '0.75rem',
+                            fontSize: '0.825rem',
+                            marginBottom: '0.75rem'
+                          }}>
+                            <div>
+                              <span style={{ color: '#64748b', display: 'block' }}>Total Amount</span>
+                              <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{priceJod} JOD</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: '#64748b', display: 'block' }}>Teacher CLIQ Alias</span>
+                              <strong style={{ color: 'var(--color-primary)' }}>{b.cliq_alias || 'REEDMATH'}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: '#64748b', display: 'block' }}>Zain Cash / Orange</span>
+                              <strong>{b.wallet_phone || '0795551234'}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: '#64748b', display: 'block' }}>Your CLIQ Reference</span>
+                              <strong style={{ fontFamily: 'monospace' }}>{b.cliq_reference || 'N/A'}</strong>
+                            </div>
+                          </div>
+
+                          {b.booking_notes && (
+                            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 0.5rem 0', fontStyle: 'italic' }}>
+                              Notes: "{b.booking_notes}"
+                            </p>
+                          )}
+
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                            Booked on {new Date(b.created_at).toLocaleString()}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Active Subscribed Classes Banner (if student is enrolled with any teacher) */}
+            {subscriptions && subscriptions.length > 0 && (
+              <div style={{
+                marginTop: '3rem',
+                borderTop: '1px solid #e2e8f0',
+                paddingTop: '1.5rem'
+              }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <BookOpen size={16} /> Enrolled Classes ({subscriptions.length})
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {pastSubs.map((sub) => (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+                  {subscriptions.map((sub) => (
                     <div 
-                      key={sub.id} 
-                      className="card"
+                      key={sub.subscription_id || sub.id}
+                      onClick={() => onSelectTeacher(sub.teacher_id)}
                       style={{
+                        padding: '0.75rem 1rem',
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '1rem 1.25rem',
-                        backgroundColor: '#f8fafc',
-                        flexWrap: 'wrap',
-                        gap: '0.75rem'
+                        justifyContent: 'space-between'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <img 
-                          src={sub.teacher_avatar} 
-                          alt={sub.teacher_name}
-                          style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-full)', opacity: 0.8 }}
-                        />
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{ fontWeight: '700', fontSize: '0.95rem' }}>{sub.teacher_name}</span>
-                            <span className="badge badge-role">CANCELLED</span>
-                          </div>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                            Cancelled on {sub.cancelled_at?.split(' ')[0] || 'Recently'}
-                          </span>
-                        </div>
+                      <div>
+                        <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#0f172a' }}>{sub.teacher_name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '600' }}>Active Enrollment</div>
                       </div>
-
-                      <button
-                        onClick={() => handleReactivateSub(sub.id)}
-                        className="btn btn-secondary btn-sm"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                      >
-                        <RotateCcw size={14} /> Reactivate (${sub.price}/mo)
-                      </button>
+                      <ArrowRight size={14} color="#64748b" />
                     </div>
                   ))}
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* TAB 6: BILLING LEDGER & SIMULATED INVOICES */}
-        {activeTab === 'ledger' && (
-          <div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                Simulated Invoices & Payment Ledger
-              </h2>
-              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                Korsa operates on a $0-first simulated checkout model for testing. No real credit card is billed.
-              </p>
-            </div>
-
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              {ledgerPayments.length === 0 ? (
-                <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                  No simulated transactions recorded.
-                </div>
-              ) : (
-                <div className="table-responsive">
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
-                        <th style={{ padding: '0.85rem 1rem', color: 'var(--color-text-muted)' }}>Invoice ID</th>
-                        <th style={{ padding: '0.85rem 1rem', color: 'var(--color-text-muted)' }}>Date</th>
-                        <th style={{ padding: '0.85rem 1rem', color: 'var(--color-text-muted)' }}>Teacher</th>
-                        <th style={{ padding: '0.85rem 1rem', color: 'var(--color-text-muted)' }}>Amount</th>
-                        <th style={{ padding: '0.85rem 1rem', color: 'var(--color-text-muted)' }}>Billing Mode</th>
-                        <th style={{ padding: '0.85rem 1rem', color: 'var(--color-text-muted)' }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ledgerPayments.map((p) => (
-                        <tr key={p.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                          <td style={{ padding: '0.85rem 1rem', fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                            INV-00{p.id}
-                          </td>
-                          <td style={{ padding: '0.85rem 1rem', color: 'var(--color-text-muted)' }}>
-                            {p.created_at?.split(' ')[0]}
-                          </td>
-                          <td style={{ padding: '0.85rem 1rem', fontWeight: '600' }}>
-                            {p.teacher_name}
-                          </td>
-                          <td style={{ padding: '0.85rem 1rem', fontWeight: '700' }}>
-                            ${p.amount}
-                          </td>
-                          <td style={{ padding: '0.85rem 1rem' }}>
-                            <span className="badge badge-role" style={{ fontSize: '0.725rem' }}>SIMULATED ($0)</span>
-                          </td>
-                          <td style={{ padding: '0.85rem 1rem' }}>
-                            <span className="badge badge-free">PAID</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
           </div>
         )}
 

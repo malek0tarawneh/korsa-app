@@ -123,7 +123,7 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                 gap: '0.35rem'
               }}
             >
-              <LayoutDashboard size={16} /> Teacher Studio
+              <LayoutDashboard size={16} /> Teacher Workspace
             </button>
           )}
 
@@ -305,7 +305,7 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
           )}
           {user?.role === 'teacher' && (
             <button onClick={() => handleNav('teacher-dashboard')} style={{ textAlign: 'left', padding: '0.5rem', fontWeight: '600' }}>
-              Teacher Studio
+              Teacher Workspace
             </button>
           )}
           {user?.role === 'admin' && (
