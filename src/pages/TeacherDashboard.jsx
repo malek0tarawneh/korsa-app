@@ -24,7 +24,13 @@ import {
   Zap,
   ArrowLeft,
   ChevronRight,
-  FileText
+  FileText,
+  Key,
+  Printer,
+  Sparkles,
+  Lock,
+  Globe,
+  X
 } from 'lucide-react';
 
 const WhatsAppIcon = ({ size = 18 }) => (
@@ -74,6 +80,25 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // Access Codes State
+  const [codesData, setCodesData] = useState({ codes: [], batches: [], stats: {} });
+  const [loadingCodes, setLoadingCodes] = useState(false);
+  const [generateCodeModal, setGenerateCodeModal] = useState({ isOpen: false, count: 10, price_jod: 10, batch_name: '' });
+  const [generatingCodes, setGeneratingCodes] = useState(false);
+  const [filterBatch, setFilterBatch] = useState('all');
+  const [copiedCode, setCopiedCode] = useState(null);
+  const [allCopied, setAllCopied] = useState(false);
+
+  // Feed & Posts State
+  const [postsData, setPostsData] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [postModal, setPostModal] = useState({
+    isOpen: false,
+    isEdit: false,
+    data: { title: '', content: '', media_url: '', attachments: [], visibility: 'public' }
+  });
+  const [savingPost, setSavingPost] = useState(false);
+
   // Load teacher overview data
   const loadOverview = async () => {
     try {
@@ -108,11 +133,216 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
     }
   };
 
+  const loadCodes = async () => {
+    setLoadingCodes(true);
+    try {
+      const res = await fetch('/api/codes/teacher', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setCodesData(json);
+      }
+    } catch (err) {
+      console.error('Failed to load access codes:', err);
+    } finally {
+      setLoadingCodes(false);
+    }
+  };
+
+  const loadTeacherPosts = async (teacherId) => {
+    const targetId = teacherId || user?.id;
+    if (!targetId) return;
+    setLoadingPosts(true);
+    try {
+      const res = await fetch(`/api/posts/teacher/${targetId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPostsData(json.posts || []);
+      }
+    } catch (err) {
+      console.error('Failed to load posts:', err);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
   useEffect(() => {
     if (token) {
       loadOverview();
+      loadCodes();
+      if (user?.id) {
+        loadTeacherPosts(user.id);
+      }
     }
-  }, [token]);
+  }, [token, user?.id]);
+
+  const handleGenerateCodes = async (e) => {
+    e.preventDefault();
+    setGeneratingCodes(true);
+    try {
+      const res = await fetch('/api/codes/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          count: parseInt(generateCodeModal.count, 10) || 1,
+          price_jod: parseFloat(generateCodeModal.price_jod) || 10,
+          batch_name: generateCodeModal.batch_name || 'Bookshop Batch'
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setMessage(`Successfully generated ${json.count} prepaid codes for ${json.batch_name}!`);
+        setGenerateCodeModal({ isOpen: false, count: 10, price_jod: 10, batch_name: '' });
+        loadCodes();
+      } else {
+        const err = await res.json();
+        setErrorMessage(err.error || 'Failed to generate codes');
+      }
+    } catch (err) {
+      setErrorMessage('Network error generating codes');
+    } finally {
+      setGeneratingCodes(false);
+    }
+  };
+
+  const handleCopyCode = (code) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2500);
+  };
+
+  const handleCopyAllCodes = () => {
+    const filtered = filterBatch === 'all' 
+      ? (codesData?.codes || [])
+      : (codesData?.codes || []).filter(c => c.batch_name === filterBatch);
+    const textList = filtered.map(c => `${c.code} (${c.price_jod} JOD - ${c.status})`).join('\n');
+    navigator.clipboard.writeText(textList);
+    setAllCopied(true);
+    setTimeout(() => setAllCopied(false), 2500);
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      const res = await fetch('/api/codes/teacher/export-csv', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `korsa-access-codes-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    } catch (err) {
+      console.error('CSV export failed:', err);
+    }
+  };
+
+  const handlePrintCodes = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    const filtered = filterBatch === 'all' 
+      ? (codesData?.codes || [])
+      : (codesData?.codes || []).filter(c => c.batch_name === filterBatch);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="${isRTL ? 'rtl' : 'ltr'}">
+      <head>
+        <title>Korsa Prepaid Voucher Cards</title>
+        <style>
+          body { font-family: sans-serif; margin: 20px; color: #1e293b; }
+          .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+          .card { border: 2px dashed #0284c7; border-radius: 8px; padding: 16px; background: #f0f9ff; text-align: center; }
+          .header { font-weight: 800; font-size: 16px; color: #0369a1; margin-bottom: 4px; }
+          .sub { font-size: 12px; color: #64748b; margin-bottom: 12px; }
+          .code { font-family: monospace; font-size: 18px; font-weight: 800; letter-spacing: 2px; background: #fff; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 4px; display: inline-block; margin: 8px 0; color: #0f172a; }
+          .footer { font-size: 11px; color: #64748b; margin-top: 8px; }
+          @media print { button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2>Korsa Prepaid Access Cards (بطاقات اشتراك منصة كورسا)</h2>
+          <p>Teacher: ${data?.profile?.name || user?.name || ''} · 30-Day Full Access</p>
+          <button onclick="window.print()" style="padding: 8px 16px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Print Now (طباعة)</button>
+        </div>
+        <div class="grid">
+          ${filtered.map(c => `
+            <div class="card">
+              <div class="header">KORSA (كورسا) - 30-Day Subscription</div>
+              <div class="sub">${c.batch_name || 'Bookshop Voucher'} · Value: ${c.price_jod} JOD</div>
+              <div class="code">${c.code}</div>
+              <div class="footer">Redeem at korsa.app/@${data?.profile?.handle || ''} · Single use voucher</div>
+            </div>
+          `).join('')}
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleSavePost = async (e) => {
+    e.preventDefault();
+    setSavingPost(true);
+    try {
+      const postData = postModal.data;
+      const isEdit = postModal.isEdit;
+      const url = isEdit ? `/api/posts/${postData.id}` : '/api/posts';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(postData)
+      });
+
+      if (res.ok) {
+        setMessage(isEdit ? 'Post updated!' : 'Post published to your feed!');
+        setPostModal({ isOpen: false, isEdit: false, data: null });
+        loadTeacherPosts(user?.id);
+      } else {
+        const err = await res.json();
+        setErrorMessage(err.error || 'Failed to publish post');
+      }
+    } catch (err) {
+      setErrorMessage('Network error publishing post');
+    } finally {
+      setSavingPost(false);
+    }
+  };
+
+  const handleDeletePost = async (postId) => {
+    if (!window.confirm('Are you sure you want to delete this post?')) return;
+    try {
+      const res = await fetch(`/api/posts/${postId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setMessage('Post deleted.');
+        loadTeacherPosts(user?.id);
+      } else {
+        const err = await res.json();
+        setErrorMessage(err.error || 'Failed to delete post');
+      }
+    } catch (err) {
+      setErrorMessage('Network error deleting post');
+    }
+  };
 
   // Load course details
   const loadCourseFull = async (courseId) => {
@@ -668,7 +898,49 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
             }}
           >
             <Calendar size={17} />
-            1-on-1 Sessions & Bookings ({serviceBookings.length})
+            1-on-1 Sessions ({serviceBookings.length})
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('codes'); setSelectedCourseId(null); }}
+            style={{
+              padding: '0.75rem 0.25rem',
+              fontSize: '0.95rem',
+              fontWeight: activeTab === 'codes' ? '800' : '600',
+              color: activeTab === 'codes' ? 'var(--color-primary)' : '#64748b',
+              borderBottom: activeTab === 'codes' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              marginBottom: '-2px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <Key size={17} />
+            {t('accessCodesTab', 'Access Codes (أكواد الاشتراك)')} ({codesData?.codes?.length || 0})
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('posts'); setSelectedCourseId(null); }}
+            style={{
+              padding: '0.75rem 0.25rem',
+              fontSize: '0.95rem',
+              fontWeight: activeTab === 'posts' ? '800' : '600',
+              color: activeTab === 'posts' ? 'var(--color-primary)' : '#64748b',
+              borderBottom: activeTab === 'posts' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              marginBottom: '-2px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <Sparkles size={17} />
+            {t('feedPostsTab', 'Feed & Lessons (المنشورات والدروس)')} ({postsData?.length || 0})
           </button>
 
           <button
@@ -689,28 +961,7 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
             }}
           >
             <Download size={17} />
-            Free Study Guides ({leadMagnets.length})
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('payouts'); setSelectedCourseId(null); }}
-            style={{
-              padding: '0.75rem 0.25rem',
-              fontSize: '0.95rem',
-              fontWeight: activeTab === 'payouts' ? '800' : '600',
-              color: activeTab === 'payouts' ? 'var(--color-primary)' : '#64748b',
-              borderBottom: activeTab === 'payouts' ? '2px solid var(--color-primary)' : '2px solid transparent',
-              marginBottom: '-2px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <Zap size={17} />
-            CLIQ & Wallet Setup
+            Free Guides ({leadMagnets.length})
           </button>
 
           <button
@@ -731,7 +982,28 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
             }}
           >
             <BookOpen size={17} />
-            My Courses ({courses.length})
+            Courses ({courses.length})
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('payouts'); setSelectedCourseId(null); }}
+            style={{
+              padding: '0.75rem 0.25rem',
+              fontSize: '0.95rem',
+              fontWeight: activeTab === 'payouts' ? '800' : '600',
+              color: activeTab === 'payouts' ? 'var(--color-primary)' : '#64748b',
+              borderBottom: activeTab === 'payouts' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              marginBottom: '-2px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <Zap size={17} />
+            CLIQ & Profile
           </button>
         </div>
 
@@ -993,6 +1265,444 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* TAB: PREPAID ACCESS CODES */}
+        {activeTab === 'codes' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                  {t('accessCodesTitle', 'Prepaid Access Codes (أكواد اشتراك المكتبات)')}
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '3px 0 0 0' }}>
+                  {t('accessCodesSubtitle', 'Generate prepaid vouchers for bookshops, libraries, and cash-paying students. Each code grants 30 days of full access.')}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setGenerateCodeModal({
+                    isOpen: true,
+                    count: 10,
+                    price_jod: data?.profile?.monthly_price_cents ? (data.profile.monthly_price_cents / 100) : 10,
+                    batch_name: ''
+                  })}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <Key size={15} /> {t('generateCodesBtn', '+ Generate Access Codes')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  disabled={!codesData?.codes?.length}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                  title={t('exportCsv', 'Export CSV for Bookshops')}
+                >
+                  <Download size={14} /> {t('exportCsv', 'Export CSV')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintCodes}
+                  disabled={!codesData?.codes?.length}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                  title={t('printCodesSheet', 'Print Voucher Cards')}
+                >
+                  <Printer size={14} /> {t('printCodesSheet', 'Print Cards')}
+                </button>
+              </div>
+            </div>
+
+            {/* Access Code Analytics Metrics */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>{t('totalGeneratedCodes', 'Total Codes Generated')}</span>
+                <div style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', marginTop: '0.2rem' }}>
+                  {codesData?.stats?.total_count || 0}
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#166534', fontWeight: '600' }}>{t('activeCodes', 'Active (Available) Codes')}</span>
+                <div style={{ fontSize: '1.35rem', fontWeight: '800', color: '#15803d', marginTop: '0.2rem' }}>
+                  {codesData?.stats?.active_count || 0}
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: '600' }}>{t('redeemedCodes', 'Redeemed Codes')}</span>
+                <div style={{ fontSize: '1.35rem', fontWeight: '800', color: '#1d4ed8', marginTop: '0.2rem' }}>
+                  {codesData?.stats?.redeemed_count || 0}
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: '#fdf4ff', border: '1px solid #f0abfc', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#86198f', fontWeight: '600' }}>{t('potentialRevenue', 'Total Value (JOD)')}</span>
+                <div style={{ fontSize: '1.35rem', fontWeight: '800', color: '#a21caf', marginTop: '0.2rem' }}>
+                  {codesData?.stats?.total_value_jod || 0} {t('jod', 'JOD')}
+                </div>
+              </div>
+            </div>
+
+            {/* Batch Filter & Copy All Bar */}
+            <div style={{
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 1rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '0.75rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>
+                  {t('batchFilter', 'Filter Batch (المجموعة / المكتبة):')}
+                </span>
+                <select
+                  value={filterBatch}
+                  onChange={(e) => setFilterBatch(e.target.value)}
+                  className="form-input"
+                  style={{ fontSize: '0.8rem', padding: '0.35rem 0.65rem', width: 'auto', minWidth: '180px' }}
+                >
+                  <option value="all">{t('allBatches', 'All Batches (جميع الدفعات والمكتبات)')}</option>
+                  {(codesData?.batches || []).map((b, idx) => (
+                    <option key={idx} value={b.batch_name}>
+                      {b.batch_name} ({b.count} codes · {b.price_jod} JOD)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleCopyAllCodes}
+                  disabled={!codesData?.codes?.length}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontWeight: '700', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  {allCopied ? <Check size={13} color="green" /> : <Copy size={13} />}
+                  {allCopied ? t('copied', 'Copied All!') : t('copyAllCodes', 'Copy All Codes')}
+                </button>
+              </div>
+            </div>
+
+            {/* Codes Table List */}
+            {loadingCodes ? (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
+                Loading prepaid codes...
+              </div>
+            ) : (!codesData?.codes || codesData.codes.length === 0) ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '3rem 1rem',
+                backgroundColor: '#f8fafc',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid #e2e8f0'
+              }}>
+                <Key size={32} color="#94a3b8" style={{ marginBottom: '0.5rem' }} />
+                <h4 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.25rem' }}>
+                  {t('noCodesYet', 'No prepaid access codes generated yet')}
+                </h4>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 1.25rem 0' }}>
+                  Generate a batch of voucher cards to sell in partner bookshops across Amman, Irbid, Zarqa, and other governorates.
+                </p>
+                <button
+                  onClick={() => setGenerateCodeModal({
+                    isOpen: true,
+                    count: 10,
+                    price_jod: data?.profile?.monthly_price_cents ? (data.profile.monthly_price_cents / 100) : 10,
+                    batch_name: ''
+                  })}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontWeight: '700' }}
+                >
+                  {t('generateCodesBtn', '+ Generate Your First Batch')}
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                backgroundColor: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 'var(--radius-md)',
+                overflow: 'hidden'
+              }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: isRTL ? 'right' : 'left', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '700' }}>
+                        <th style={{ padding: '0.75rem 1rem' }}>Code (كود الاشتراك)</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Batch / Library</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Price</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Status</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Redeemed By</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(codesData.codes || [])
+                        .filter(c => filterBatch === 'all' || c.batch_name === filterBatch)
+                        .map((codeItem) => {
+                          const isRedeemed = codeItem.status === 'redeemed';
+                          return (
+                            <tr key={codeItem.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', fontWeight: '800', fontSize: '0.9rem', color: '#0f172a' }}>
+                                {codeItem.code}
+                              </td>
+                              <td style={{ padding: '0.75rem 1rem', color: '#334155' }}>
+                                {codeItem.batch_name || '—'}
+                              </td>
+                              <td style={{ padding: '0.75rem 1rem', fontWeight: '700', color: '#0f172a' }}>
+                                {codeItem.price_jod} JOD
+                              </td>
+                              <td style={{ padding: '0.75rem 1rem' }}>
+                                {isRedeemed ? (
+                                  <span style={{
+                                    fontSize: '0.725rem',
+                                    fontWeight: '700',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '9999px',
+                                    backgroundColor: '#f1f5f9',
+                                    color: '#64748b',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                  }}>
+                                    <CheckCircle2 size={12} /> {t('codeStatusRedeemed', 'Redeemed')}
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '0.725rem',
+                                    fontWeight: '700',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '9999px',
+                                    backgroundColor: '#dcfce7',
+                                    color: '#15803d',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                  }}>
+                                    <Key size={11} /> {t('codeStatusActive', 'Active (Available)')}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '0.75rem 1rem', color: '#64748b', fontSize: '0.8rem' }}>
+                                {isRedeemed ? (
+                                  <div>
+                                    <div style={{ fontWeight: '600', color: '#0f172a' }}>{codeItem.redeemed_by_name || 'Student'}</div>
+                                    <div style={{ fontSize: '0.725rem' }}>{codeItem.redeemed_at ? new Date(codeItem.redeemed_at).toLocaleDateString() : ''}</div>
+                                  </div>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyCode(codeItem.code)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{
+                                    fontSize: '0.725rem',
+                                    padding: '0.25rem 0.5rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem'
+                                  }}
+                                >
+                                  {copiedCode === codeItem.code ? <Check size={12} color="green" /> : <Copy size={12} />}
+                                  {copiedCode === codeItem.code ? t('copied', 'Copied') : t('copyCode', 'Copy')}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: CREATOR FEED & POSTS */}
+        {activeTab === 'posts' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                  {t('feedPostsTab', 'Creator Feed & Lessons (حائط الدروس والمنشورات)')}
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '3px 0 0 0' }}>
+                  {t('feedPostsSubtitle', 'Publish video explanations, exam reviews, and PDF summaries directly to your followers and active subscribers.')}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPostModal({
+                  isOpen: true,
+                  isEdit: false,
+                  data: { title: '', content: '', media_url: '', attachments: [{ title: '', url: '' }], visibility: 'public' }
+                })}
+                className="btn btn-primary btn-sm"
+                style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <PlusCircle size={15} /> {t('createPostBtn', '+ Create New Post')}
+              </button>
+            </div>
+
+            {loadingPosts ? (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
+                Loading feed posts...
+              </div>
+            ) : (!postsData || postsData.length === 0) ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '3rem 1rem',
+                backgroundColor: '#f8fafc',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid #e2e8f0'
+              }}>
+                <Sparkles size={32} color="#94a3b8" style={{ marginBottom: '0.5rem' }} />
+                <h4 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.25rem' }}>
+                  {t('noPostsYet', 'No feed posts published yet')}
+                </h4>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 1.25rem 0' }}>
+                  Keep your students engaged with announcements, exam strategies, and subscriber-exclusive video lessons.
+                </p>
+                <button
+                  onClick={() => setPostModal({
+                    isOpen: true,
+                    isEdit: false,
+                    data: { title: '', content: '', media_url: '', attachments: [{ title: '', url: '' }], visibility: 'public' }
+                  })}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontWeight: '700' }}
+                >
+                  {t('createPostBtn', '+ Create Your First Post')}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {postsData.map((post) => (
+                  <div
+                    key={post.id}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '1.25rem',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                          {post.visibility === 'subscribers' ? (
+                            <span style={{
+                              backgroundColor: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.7rem',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem'
+                            }}>
+                              <Lock size={11} /> {t('subscribersOnlyBadge', 'Subscribers Only')}
+                            </span>
+                          ) : (
+                            <span style={{
+                              backgroundColor: '#f1f5f9',
+                              color: '#475569',
+                              border: '1px solid #e2e8f0',
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.7rem',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem'
+                            }}>
+                              <Globe size={11} /> {t('publicPostBadge', 'Public Post')}
+                            </span>
+                          )}
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                            {new Date(post.created_at).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <h4 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.35rem 0' }}>
+                          {post.title}
+                        </h4>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setPostModal({
+                            isOpen: true,
+                            isEdit: true,
+                            data: {
+                              id: post.id,
+                              title: post.title,
+                              content: post.content,
+                              media_url: post.media_url || '',
+                              attachments: post.attachments || [],
+                              visibility: post.visibility
+                            }
+                          })}
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                        >
+                          <Edit size={13} /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePost(post.id)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '0.3rem 0.6rem' }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <p style={{ fontSize: '0.875rem', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-line', margin: '0 0 0.75rem 0' }}>
+                      {post.content}
+                    </p>
+
+                    {post.media_url && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <Video size={14} /> Video attached: <a href={post.media_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>{post.media_url}</a>
+                      </div>
+                    )}
+
+                    {post.attachments && post.attachments.length > 0 && (
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                        {post.attachments.map((att, aIdx) => (
+                          <span key={aIdx} style={{ fontSize: '0.75rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.2rem 0.5rem', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <FileText size={12} color="#ef4444" /> {att.title || 'Attachment'}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1750,6 +2460,257 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 2, fontWeight: '700' }}>
                   Save Offering
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Generate Prepaid Access Codes */}
+      {generateCodeModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 'var(--radius-lg)', maxWidth: '460px', width: '100%', padding: '1.75rem', position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setGenerateCodeModal({ ...generateCodeModal, isOpen: false })}
+              style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#eff6ff', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Key size={18} />
+              </div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                {t('generateCodesBtn', 'Generate Prepaid Access Codes')}
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '0.825rem', color: '#64748b', marginBottom: '1.25rem' }}>
+              {t('batchNamePlaceholder', 'Specify the partner bookshop name, code quantity, and standard 30-day price in JOD.')}
+            </p>
+
+            <form onSubmit={handleGenerateCodes} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                  {t('batchName', 'Batch / Bookshop Name (اسم المكتبة أو المركز)')}
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder={t('batchNamePlaceholder', 'e.g. Dar Al-Hikma Bookshop (مكتبة دار الحكمة)')}
+                  value={generateCodeModal.batch_name}
+                  onChange={(e) => setGenerateCodeModal({ ...generateCodeModal, batch_name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                    {t('generateCodesCount', 'Number of Codes')}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    className="form-input"
+                    value={generateCodeModal.count}
+                    onChange={(e) => setGenerateCodeModal({ ...generateCodeModal, count: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                    {t('pricePerCodeJod', 'Price (JOD)')}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-input"
+                    value={generateCodeModal.price_jod}
+                    onChange={(e) => setGenerateCodeModal({ ...generateCodeModal, price_jod: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.75rem',
+                fontSize: '0.8rem',
+                color: '#475569'
+              }}>
+                <div>Estimated Total Value: <strong style={{ color: '#0f172a' }}>{(parseInt(generateCodeModal.count, 10) || 0) * (parseFloat(generateCodeModal.price_jod) || 0)} JOD</strong></div>
+                <div style={{ fontSize: '0.725rem', color: '#64748b', marginTop: '2px' }}>Platform commission: 0% (You retain 100% of bookshop cash collections)</div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setGenerateCodeModal({ ...generateCodeModal, isOpen: false })}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  {t('close', 'Cancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={generatingCodes}
+                  className="btn btn-primary"
+                  style={{ flex: 2, fontWeight: '700' }}
+                >
+                  {generatingCodes ? t('generating', 'Generating Codes...') : t('generateCodesBtn', 'Generate Codes')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Create / Edit Creator Feed Post */}
+      {postModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 'var(--radius-lg)', maxWidth: '520px', width: '100%', padding: '1.75rem', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setPostModal({ isOpen: false, isEdit: false, data: null })}
+              style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#eff6ff', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sparkles size={18} />
+              </div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                {postModal.isEdit ? 'Edit Feed Post' : t('createPostBtn', '+ Create New Post')}
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '0.825rem', color: '#64748b', marginBottom: '1.25rem' }}>
+              {t('feedPostsSubtitle', 'Publish lessons, announcements, and video explanations for public students or active subscribers.')}
+            </p>
+
+            <form onSubmit={handleSavePost} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                  {t('postTitleLabel', 'Post Title')}
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder={t('postTitlePlaceholder', 'e.g. Tawjihi Calculus Exam Review & Shortcuts')}
+                  value={postModal.data?.title || ''}
+                  onChange={(e) => setPostModal({ ...postModal, data: { ...postModal.data, title: e.target.value } })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                  {t('postVisibilityLabel', 'Audience Visibility (فئة المشاهدين)')}
+                </label>
+                <select
+                  className="form-input"
+                  value={postModal.data?.visibility || 'public'}
+                  onChange={(e) => setPostModal({ ...postModal, data: { ...postModal.data, visibility: e.target.value } })}
+                  style={{ fontWeight: '600' }}
+                >
+                  <option value="public">🌐 {t('visibilityPublic', 'Public (Free for everyone)')}</option>
+                  <option value="subscribers">🔒 {t('visibilitySubscribers', 'Subscribers Only (Exclusive to subscribers & code holders)')}</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                  {t('postContentLabel', 'Post Content & Notes')}
+                </label>
+                <textarea
+                  className="form-input"
+                  rows={4}
+                  placeholder={t('postContentPlaceholder', 'Write your lesson explanation, tips, or study advice...')}
+                  value={postModal.data?.content || ''}
+                  onChange={(e) => setPostModal({ ...postModal, data: { ...postModal.data, content: e.target.value } })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                  {t('postVideoUrlLabel', 'Video URL (Optional YouTube or MP4)')}
+                </label>
+                <input
+                  type="url"
+                  className="form-input"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={postModal.data?.media_url || ''}
+                  onChange={(e) => setPostModal({ ...postModal, data: { ...postModal.data, media_url: e.target.value } })}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                  {t('postAttachmentsLabel', 'PDF Attachment Link (Optional)')}
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder={t('attachmentTitle', 'Attachment Title')}
+                    value={postModal.data?.attachments?.[0]?.title || ''}
+                    onChange={(e) => {
+                      const prevAtt = postModal.data?.attachments?.[0] || { title: '', url: '' };
+                      setPostModal({
+                        ...postModal,
+                        data: {
+                          ...postModal.data,
+                          attachments: [{ ...prevAtt, title: e.target.value }]
+                        }
+                      });
+                    }}
+                  />
+                  <input
+                    type="url"
+                    className="form-input"
+                    placeholder={t('attachmentUrl', 'File / PDF Link')}
+                    value={postModal.data?.attachments?.[0]?.url || ''}
+                    onChange={(e) => {
+                      const prevAtt = postModal.data?.attachments?.[0] || { title: 'PDF Worksheet', url: '' };
+                      setPostModal({
+                        ...postModal,
+                        data: {
+                          ...postModal.data,
+                          attachments: [{ ...prevAtt, url: e.target.value }]
+                        }
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setPostModal({ isOpen: false, isEdit: false, data: null })}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  {t('close', 'Cancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPost}
+                  className="btn btn-primary"
+                  style={{ flex: 2, fontWeight: '700' }}
+                >
+                  {savingPost ? t('publishing', 'Publishing...') : t('publishPostBtn', 'Publish Post')}
                 </button>
               </div>
             </form>

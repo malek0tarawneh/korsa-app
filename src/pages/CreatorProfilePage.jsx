@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { createWhatsAppCliqProofUrl } from '../utils/whatsapp';
 import { 
   Share2, 
@@ -14,12 +15,21 @@ import {
   CheckCircle2, 
   Play, 
   Lock, 
+  Unlock,
   ShieldCheck, 
   Zap, 
   Calendar, 
   Gift, 
   Phone, 
-  FileText 
+  FileText,
+  Key,
+  Sparkles,
+  MessageSquare,
+  ExternalLink,
+  AlertCircle,
+  X,
+  Globe,
+  Eye
 } from 'lucide-react';
 
 const WhatsAppIcon = ({ size = 18 }) => (
@@ -47,6 +57,12 @@ const TwitterIcon = ({ size = 14 }) => (
   </svg>
 );
 
+function getYouTubeEmbedUrl(url) {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  return match ? `https://www.youtube-nocookie.com/embed/${match[1]}` : null;
+}
+
 export default function CreatorProfilePage({ 
   handle, 
   onBack, 
@@ -55,10 +71,16 @@ export default function CreatorProfilePage({
   onOpenAuth 
 }) {
   const { user, token } = useAuth();
+  const { t, isRTL } = useLanguage();
   const [creatorData, setCreatorData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
+  // Navigation tabs: 'feed' | 'guides' | 'services' | 'courses' | 'all'
+  const [activeTab, setActiveTab] = useState('feed');
+  const [feedPosts, setFeedPosts] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+
   // Modals & feedback
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCliq, setCopiedCliq] = useState(false);
@@ -67,6 +89,13 @@ export default function CreatorProfilePage({
   const [claimName, setClaimName] = useState(user ? user.name : '');
   const [claiming, setClaiming] = useState(false);
   const [claimSuccess, setClaimSuccess] = useState(null);
+
+  // Redeem Access Code modal state
+  const [redeemModalOpen, setRedeemModalOpen] = useState(false);
+  const [redeemCodeInput, setRedeemCodeInput] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemSuccess, setRedeemSuccess] = useState(null);
+  const [redeemError, setRedeemError] = useState('');
 
   // Booking Modal
   const [bookingModal, setBookingModal] = useState({ isOpen: false, service: null });
@@ -77,6 +106,25 @@ export default function CreatorProfilePage({
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(null);
+
+  // Fetch teacher feed posts
+  const loadPosts = async (teacherId) => {
+    if (!teacherId) return;
+    setLoadingPosts(true);
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/posts/teacher/${teacherId}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        setFeedPosts(json.posts || []);
+      }
+    } catch (err) {
+      console.error('Failed to load feed posts:', err);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
 
   // Fetch creator profile by handle
   const loadCreator = async () => {
@@ -92,6 +140,9 @@ export default function CreatorProfilePage({
       if (res.ok) {
         const json = await res.json();
         setCreatorData(json);
+        if (json.creator?.id) {
+          loadPosts(json.creator.id);
+        }
       } else {
         const errJson = await res.json();
         setError(errJson.error || 'Teacher profile not found');
@@ -148,6 +199,47 @@ export default function CreatorProfilePage({
     navigator.clipboard.writeText(alias);
     setCopiedCliq(true);
     setTimeout(() => setCopiedCliq(false), 2500);
+  };
+
+  // Redeem prepaid access code
+  const handleRedeemCode = async (e) => {
+    e.preventDefault();
+    if (!redeemCodeInput.trim()) return;
+
+    if (!token) {
+      onOpenAuth('login');
+      return;
+    }
+
+    setRedeeming(true);
+    setRedeemError('');
+    try {
+      const res = await fetch('/api/codes/redeem', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ code: redeemCodeInput })
+      });
+
+      const resData = await res.json();
+      if (res.ok) {
+        setRedeemSuccess(resData);
+        // Update subscription state to active immediately
+        setCreatorData(prev => prev ? ({ ...prev, isSubscribed: true }) : prev);
+        // Refresh feed posts so subscriber posts immediately unlock
+        if (creatorData?.creator?.id) {
+          loadPosts(creatorData.creator.id);
+        }
+      } else {
+        setRedeemError(resData.error || 'Failed to activate access code');
+      }
+    } catch (err) {
+      setRedeemError('Network error activating code');
+    } finally {
+      setRedeeming(false);
+    }
   };
 
   // Claim free study guide
@@ -416,6 +508,32 @@ export default function CreatorProfilePage({
                   Join for {priceJod} JOD/mo
                 </button>
               )}
+
+              <button 
+                type="button"
+                onClick={() => {
+                  setRedeemModalOpen(true);
+                  setRedeemSuccess(null);
+                  setRedeemError('');
+                  setRedeemCodeInput('');
+                }}
+                className="btn btn-secondary btn-sm"
+                style={{ 
+                  width: '100%', 
+                  marginTop: '0.5rem', 
+                  fontSize: '0.8rem', 
+                  fontWeight: '700', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '0.35rem', 
+                  borderColor: '#cbd5e1' 
+                }}
+                title={t('redeemCodeBtn', 'Redeem Access Code')}
+              >
+                <Key size={13} color="var(--color-primary)" />
+                {t('redeemCodeBtn', 'Redeem Access Code')}
+              </button>
             </div>
 
           </div>
@@ -477,6 +595,49 @@ export default function CreatorProfilePage({
             </div>
           </div>
 
+          {/* Bookshop Prepaid Vouchers Quick Bar */}
+          <div style={{
+            marginTop: '0.75rem',
+            padding: '0.65rem 1.15rem',
+            backgroundColor: '#f8fafc',
+            border: '1px dashed #cbd5e1',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '0.825rem',
+            color: '#475569',
+            flexWrap: 'wrap',
+            gap: '0.5rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <Key size={15} color="var(--color-primary)" />
+              <span>{t('havePrepaidCode', 'Have a prepaid voucher from a bookshop or stationery center?')}</span>
+            </div>
+            <button
+              onClick={() => {
+                setRedeemModalOpen(true);
+                setRedeemSuccess(null);
+                setRedeemError('');
+                setRedeemCodeInput('');
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-primary)',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontSize: '0.825rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                padding: '0.2rem 0'
+              }}
+            >
+              {t('redeemCodeBtn', 'Redeem Access Code (تفعيل كود الاشتراك)')} →
+            </button>
+          </div>
+
         </div>
       </header>
 
@@ -511,117 +672,473 @@ export default function CreatorProfilePage({
           </div>
         </div>
 
-        {/* 1. FREE STUDY GUIDES SECTION (دوسيات وتلخيصات مجانية) */}
-        <section style={{ marginBottom: '2.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#059669', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                <Gift size={14} /> Free Downloads
-              </div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
-                Free Study Guides & Summaries (دوسيات)
-              </h2>
-            </div>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              100% Free · Instant Access
-            </span>
-          </div>
+        {/* Creator Navigation Tabs */}
+        <div style={{
+          display: 'flex',
+          gap: '0.5rem',
+          borderBottom: '2px solid #e2e8f0',
+          marginBottom: '2rem',
+          overflowX: 'auto',
+          paddingBottom: '0.25rem'
+        }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('feed')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              fontWeight: '700',
+              fontSize: '0.925rem',
+              backgroundColor: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'feed' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'feed' ? 'var(--color-primary)' : '#64748b',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '-2px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Sparkles size={16} />
+            {t('feedTabTitle', 'Feed & Updates')}
+            {feedPosts && feedPosts.length > 0 && (
+              <span style={{
+                fontSize: '0.7rem',
+                backgroundColor: activeTab === 'feed' ? '#eff6ff' : '#f1f5f9',
+                color: activeTab === 'feed' ? 'var(--color-primary)' : '#64748b',
+                padding: '0.1rem 0.45rem',
+                borderRadius: '9999px',
+                fontWeight: '800'
+              }}>
+                {feedPosts.length}
+              </span>
+            )}
+          </button>
 
-          {lead_magnets && lead_magnets.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-              {(lead_magnets || []).map((lm) => (
-                <div 
-                  key={lm.id}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '1.25rem',
-                    border: '1px solid #e2e8f0',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{
-                        backgroundColor: '#dcfce7',
-                        color: '#15803d',
-                        fontWeight: '700',
-                        fontSize: '0.7rem',
-                        padding: '0.15rem 0.45rem',
-                        borderRadius: '9999px'
-                      }}>
-                        FREE GUIDE
-                      </span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        {lm.downloads_count} downloads
-                      </span>
-                    </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('guides')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              fontWeight: '700',
+              fontSize: '0.925rem',
+              backgroundColor: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'guides' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'guides' ? 'var(--color-primary)' : '#64748b',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '-2px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Gift size={16} />
+            {t('freeGuidesBadge', 'Free Study Guides (دوسيات)')}
+            {lead_magnets && lead_magnets.length > 0 && (
+              <span style={{
+                fontSize: '0.7rem',
+                backgroundColor: '#dcfce7',
+                color: '#15803d',
+                padding: '0.1rem 0.45rem',
+                borderRadius: '9999px',
+                fontWeight: '800'
+              }}>
+                {lead_magnets.length}
+              </span>
+            )}
+          </button>
 
-                    <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.35rem', lineHeight: 1.35 }}>
-                      {lm.title}
-                    </h4>
+          <button
+            type="button"
+            onClick={() => setActiveTab('sessions')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              fontWeight: '700',
+              fontSize: '0.925rem',
+              backgroundColor: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'sessions' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'sessions' ? 'var(--color-primary)' : '#64748b',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '-2px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Calendar size={16} />
+            {t('oneOnOneSection', '1-on-1 Sessions (حصص خاصة)')}
+          </button>
 
-                    <p style={{ fontSize: '0.825rem', color: '#64748b', lineHeight: 1.5, marginBottom: '1rem' }}>
-                      {lm.description}
-                    </p>
-                  </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('courses')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              fontWeight: '700',
+              fontSize: '0.925rem',
+              backgroundColor: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'courses' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'courses' ? 'var(--color-primary)' : '#64748b',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '-2px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <BookOpen size={16} />
+            {t('coursesCurriculum', 'Courses & Curriculum')}
+          </button>
 
-                  <button 
-                    onClick={() => {
-                      setClaimModal({ isOpen: true, leadMagnet: lm });
-                      setClaimSuccess(null);
-                    }}
-                    className="btn btn-primary"
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.4rem',
-                      padding: '0.5rem',
-                      fontSize: '0.825rem',
-                      fontWeight: '700'
-                    }}
-                  >
-                    <Download size={15} /> Download Free PDF
-                  </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              fontWeight: '700',
+              fontSize: '0.925rem',
+              backgroundColor: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'all' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'all' ? 'var(--color-primary)' : '#64748b',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '-2px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Eye size={16} />
+            {t('viewAll', 'All Overview (عرض الكل)')}
+          </button>
+        </div>
+
+        {/* CREATOR FEED POSTS SECTION */}
+        {(activeTab === 'feed' || activeTab === 'all') && (
+          <section style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                  <Sparkles size={14} /> {t('feedTabTitle', 'Feed & Updates')}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem' }}>
-              No study guides published yet.
-            </div>
-          )}
-        </section>
-
-        {/* 2. 1-ON-1 SESSIONS & REVIEWS (حصص فردية ومراجعات) */}
-        <section style={{ marginBottom: '2.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#d97706', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                <Calendar size={14} /> Individual Tutoring
+                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
+                  {t('teacherFeedTitle', 'Creator Feed & Announcements (منشورات ودروس الأستاذ)')}
+                </h2>
               </div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
-                1-on-1 Sessions & Reviews (حصص فردية)
-              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setRedeemModalOpen(true);
+                  setRedeemSuccess(null);
+                  setRedeemError('');
+                  setRedeemCodeInput('');
+                }}
+                className="btn btn-secondary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontSize: '0.8rem',
+                  fontWeight: '700',
+                  padding: '0.45rem 0.85rem'
+                }}
+              >
+                <Key size={14} color="var(--color-primary)" />
+                {t('redeemCodeBtn', 'Redeem Access Code')}
+              </button>
             </div>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              Pay via CLIQ / Zain Cash
-            </span>
-          </div>
 
-          {services && services.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-              {(services || []).map((srv) => {
-                const srvPriceJod = srv.price_jod || Math.round(srv.price_cents / 100);
+            {loadingPosts ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                Loading feed posts...
+              </div>
+            ) : feedPosts && feedPosts.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {feedPosts.map((post) => {
+                  const isSubscriberPost = post.visibility === 'subscribers';
+                  const isLocked = Boolean(post.locked);
+                  const youtubeEmbed = post.media_url ? getYouTubeEmbedUrl(post.media_url) : null;
 
-                return (
+                  return (
+                    <article 
+                      key={post.id}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid #e2e8f0',
+                        overflow: 'hidden',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                      }}
+                    >
+                      {/* Post Header */}
+                      <div style={{
+                        padding: '1.15rem 1.25rem 0.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderBottom: '1px solid #f8fafc'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '9999px',
+                            backgroundColor: 'var(--color-primary)',
+                            color: '#fff',
+                            fontWeight: '800',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.95rem'
+                          }}>
+                            {creator.avatar_url ? (
+                              <img src={creator.avatar_url} alt={creator.name} style={{ width: '100%', height: '100%', borderRadius: '9999px', objectFit: 'cover' }} />
+                            ) : (
+                              creator.name?.charAt(0) || 'T'
+                            )}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '700', fontSize: '0.9rem', color: '#0f172a' }}>
+                              {creator.name}
+                            </div>
+                            <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>
+                              {new Date(post.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Visibility Badge */}
+                        <div>
+                          {isSubscriberPost ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              backgroundColor: isLocked ? '#fef2f2' : '#eff6ff',
+                              color: isLocked ? '#b91c1c' : '#1d4ed8',
+                              border: isLocked ? '1px solid #fecaca' : '1px solid #bfdbfe',
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.7rem',
+                              fontWeight: '800'
+                            }}>
+                              {isLocked ? <Lock size={11} /> : <CheckCircle2 size={11} />}
+                              {t('subscribersOnlyBadge', 'Subscribers Only')}
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              backgroundColor: '#f1f5f9',
+                              color: '#475569',
+                              border: '1px solid #e2e8f0',
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.7rem',
+                              fontWeight: '700'
+                            }}>
+                              <Globe size={11} />
+                              {t('publicPostBadge', 'Public Post')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Post Body */}
+                      <div style={{ padding: '0.9rem 1.25rem 1.25rem' }}>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0', lineHeight: 1.35 }}>
+                          {post.title}
+                        </h3>
+
+                        <div style={{ 
+                          fontSize: '0.925rem', 
+                          color: '#334155', 
+                          lineHeight: 1.65, 
+                          whiteSpace: 'pre-line',
+                          marginBottom: isLocked ? '1rem' : '1.25rem'
+                        }}>
+                          {post.content}
+                        </div>
+
+                        {/* Locked Teaser Card */}
+                        {isLocked && (
+                          <div style={{
+                            backgroundColor: '#f8fafc',
+                            border: '1px dashed #cbd5e1',
+                            borderRadius: 'var(--radius-md)',
+                            padding: '1.25rem',
+                            textAlign: 'center',
+                            marginTop: '0.75rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '0.75rem'
+                          }}>
+                            <div style={{
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#fee2e2',
+                              color: '#dc2626',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <Lock size={20} />
+                            </div>
+                            <div>
+                              <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a' }}>
+                                {t('subscribersOnlyBadge', 'Subscriber Exclusive Content')}
+                              </h4>
+                              <p style={{ margin: 0, fontSize: '0.825rem', color: '#64748b', maxWidth: '460px' }}>
+                                {t('lockedPostNotice', 'This full video lesson, attached PDF worksheets, and complete notes are exclusive to active subscribers.')}
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRedeemModalOpen(true);
+                                  setRedeemSuccess(null);
+                                  setRedeemError('');
+                                  setRedeemCodeInput('');
+                                }}
+                                className="btn btn-primary"
+                                style={{ fontSize: '0.8rem', fontWeight: '700', padding: '0.45rem 0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                              >
+                                <Key size={13} />
+                                {t('redeemCodeBtn', 'Redeem Access Code')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onOpenSubscribe(creator)}
+                                className="btn btn-secondary"
+                                style={{ fontSize: '0.8rem', fontWeight: '700', padding: '0.45rem 0.9rem' }}
+                              >
+                                {t('joinFor', 'Subscribe for')} {creator.monthly_price_jod || Math.round((creator.monthly_price_cents || 3500) / 100)} JOD/mo
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Unlocked Media - Video Embed */}
+                        {!isLocked && post.media_url && (
+                          <div style={{ marginBottom: '1.25rem', borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: '#000' }}>
+                            {youtubeEmbed ? (
+                              <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
+                                <iframe
+                                  src={youtubeEmbed}
+                                  title={post.title}
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                                />
+                              </div>
+                            ) : (
+                              <video
+                                controls
+                                src={post.media_url}
+                                style={{ width: '100%', maxHeight: '420px', display: 'block' }}
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {/* Unlocked Attachments (PDFs) */}
+                        {!isLocked && post.attachments && post.attachments.length > 0 && (
+                          <div style={{ marginTop: '1rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.85rem' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <FileText size={13} />
+                              {t('postAttachmentsLabel', 'Lesson Attachments & PDFs')}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                              {post.attachments.map((att, attIdx) => (
+                                <div
+                                  key={attIdx}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '0.55rem 0.85rem',
+                                    backgroundColor: '#f8fafc',
+                                    borderRadius: 'var(--radius-sm)',
+                                    border: '1px solid #e2e8f0'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <FileText size={16} color="#ef4444" />
+                                    <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#1e293b' }}>
+                                      {att.title || `Attachment #${attIdx + 1}`}
+                                    </span>
+                                  </div>
+                                  <a
+                                    href={att.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="btn btn-secondary"
+                                    style={{
+                                      fontSize: '0.75rem',
+                                      padding: '0.25rem 0.65rem',
+                                      fontWeight: '700',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.3rem',
+                                      textDecoration: 'none'
+                                    }}
+                                  >
+                                    <Download size={13} /> Download
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ backgroundColor: '#f8fafc', padding: '2rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem' }}>
+                {t('noPostsYet', 'No feed posts published yet.')}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 1. FREE STUDY GUIDES SECTION (دوسيات وتلخيصات مجانية) */}
+        {(activeTab === 'guides' || activeTab === 'all') && (
+          <section style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#059669', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                  <Gift size={14} /> Free Downloads
+                </div>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
+                  Free Study Guides & Summaries (دوسيات)
+                </h2>
+              </div>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                100% Free · Instant Access
+              </span>
+            </div>
+
+            {lead_magnets && lead_magnets.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                {(lead_magnets || []).map((lm) => (
                   <div 
-                    key={srv.id}
+                    key={lm.id}
                     style={{
                       backgroundColor: '#ffffff',
                       borderRadius: 'var(--radius-md)',
@@ -636,193 +1153,288 @@ export default function CreatorProfilePage({
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                         <span style={{
-                          backgroundColor: '#fef3c7',
-                          color: '#b45309',
+                          backgroundColor: '#dcfce7',
+                          color: '#15803d',
                           fontWeight: '700',
                           fontSize: '0.7rem',
                           padding: '0.15rem 0.45rem',
                           borderRadius: '9999px'
                         }}>
-                          {srv.service_type === 'mentorship' ? '1-on-1 Mentorship' : srv.service_type === 'qa_session' ? 'Live Q&A' : 'Review Session'}
+                          FREE GUIDE
                         </span>
-
-                        <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                          <Clock size={12} /> {srv.duration_minutes} mins
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          {lm.downloads_count} downloads
                         </span>
                       </div>
 
                       <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.35rem', lineHeight: 1.35 }}>
-                        {srv.title}
+                        {lm.title}
                       </h4>
 
-                      <div style={{ fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>
-                        {srvPriceJod} JOD
-                      </div>
+                      <p style={{ fontSize: '0.825rem', color: '#64748b', lineHeight: 1.5, marginBottom: '1rem' }}>
+                        {lm.description}
+                      </p>
                     </div>
 
                     <button 
                       onClick={() => {
-                        setBookingModal({ isOpen: true, service: srv });
-                        setBookingSuccess(null);
-                        setBookingCliqRef('');
-                        setBookingNotes('');
+                        setClaimModal({ isOpen: true, leadMagnet: lm });
+                        setClaimSuccess(null);
                       }}
-                      className="btn btn-secondary"
+                      className="btn btn-primary"
                       style={{
                         width: '100%',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '0.4rem',
-                        padding: '0.55rem',
-                        fontSize: '0.85rem',
+                        padding: '0.5rem',
+                        fontSize: '0.825rem',
                         fontWeight: '700'
                       }}
                     >
-                      <Calendar size={15} /> Book Session ({srvPriceJod} JOD)
+                      <Download size={15} /> Download Free PDF
                     </button>
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            ) : (
+              <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem' }}>
+                No study guides published yet.
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 2. 1-ON-1 SESSIONS & REVIEWS (حصص فردية ومراجعات) */}
+        {(activeTab === 'sessions' || activeTab === 'all') && (
+          <section style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#d97706', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                  <Calendar size={14} /> Individual Tutoring
+                </div>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
+                  1-on-1 Sessions & Reviews (حصص فردية)
+                </h2>
+              </div>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                Pay via CLIQ / Zain Cash
+              </span>
             </div>
-          ) : (
-            <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem' }}>
-              No 1-on-1 sessions currently offered.
-            </div>
-          )}
-        </section>
+
+            {services && services.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                {(services || []).map((srv) => {
+                  const srvPriceJod = srv.price_jod || Math.round(srv.price_cents / 100);
+
+                  return (
+                    <div 
+                      key={srv.id}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '1.25rem',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                          <span style={{
+                            backgroundColor: '#fef3c7',
+                            color: '#b45309',
+                            fontWeight: '700',
+                            fontSize: '0.7rem',
+                            padding: '0.15rem 0.45rem',
+                            borderRadius: '9999px'
+                          }}>
+                            {srv.service_type === 'mentorship' ? '1-on-1 Mentorship' : srv.service_type === 'qa_session' ? 'Live Q&A' : 'Review Session'}
+                          </span>
+
+                          <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Clock size={12} /> {srv.duration_minutes} mins
+                          </span>
+                        </div>
+
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.35rem', lineHeight: 1.35 }}>
+                          {srv.title}
+                        </h4>
+
+                        <div style={{ fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>
+                          {srvPriceJod} JOD
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          setBookingModal({ isOpen: true, service: srv });
+                          setBookingSuccess(null);
+                          setBookingCliqRef('');
+                          setBookingNotes('');
+                        }}
+                        className="btn btn-secondary"
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.4rem',
+                          padding: '0.55rem',
+                          fontSize: '0.85rem',
+                          fontWeight: '700'
+                        }}
+                      >
+                        <Calendar size={15} /> Book Session ({srvPriceJod} JOD)
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', textAlign: 'center', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem' }}>
+                No 1-on-1 sessions currently offered.
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 3. COURSES & LESSONS */}
-        <section style={{ marginBottom: '2.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                <BookOpen size={14} /> Curriculum
-              </div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
-                Courses & Sample Lessons
-              </h2>
-            </div>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              {stats?.course_count || courses.length} Courses
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {(courses || []).map((course) => (
-              <div 
-                key={course.id}
-                style={{
-                  backgroundColor: '#ffffff',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid #e2e8f0',
-                  overflow: 'hidden'
-                }}
-              >
-                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fcfcfd' }}>
-                  <span style={{ fontSize: '0.725rem', fontWeight: '700', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
-                    {course.subject_name || 'General'} · {course.educational_level}
-                  </span>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '2px 0 0 0' }}>
-                    {course.title}
-                  </h3>
-                  <p style={{ fontSize: '0.825rem', color: '#64748b', marginTop: '3px', margin: '3px 0 0 0' }}>
-                    {course.description}
-                  </p>
+        {(activeTab === 'courses' || activeTab === 'all') && (
+          <section style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                  <BookOpen size={14} /> Curriculum
                 </div>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: '0.15rem 0 0 0' }}>
+                  Courses & Sample Lessons
+                </h2>
+              </div>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                {stats?.course_count || courses.length} Courses
+              </span>
+            </div>
 
-                <div style={{ padding: '0.75rem 1.25rem' }}>
-                  {(course.sections || []).map((section) => (
-                    <div key={section.id} style={{ marginBottom: '0.75rem' }}>
-                      <h5 style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
-                        {section.title}
-                      </h5>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {(courses || []).map((course) => (
+                <div 
+                  key={course.id}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid #e2e8f0',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fcfcfd' }}>
+                    <span style={{ fontSize: '0.725rem', fontWeight: '700', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
+                      {course.subject_name || 'General'} · {course.educational_level}
+                    </span>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '2px 0 0 0' }}>
+                      {course.title}
+                    </h3>
+                    <p style={{ fontSize: '0.825rem', color: '#64748b', marginTop: '3px', margin: '3px 0 0 0' }}>
+                      {course.description}
+                    </p>
+                  </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                        {(section.lessons || []).map((lesson) => {
-                          const isUnlocked = !lesson.is_locked;
+                  <div style={{ padding: '0.75rem 1.25rem' }}>
+                    {(course.sections || []).map((section) => (
+                      <div key={section.id} style={{ marginBottom: '0.75rem' }}>
+                        <h5 style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+                          {section.title}
+                        </h5>
 
-                          return (
-                            <div 
-                              key={lesson.id}
-                              onClick={() => {
-                                if (isUnlocked) {
-                                  onOpenLesson(lesson, creator);
-                                } else {
-                                  onOpenSubscribe(creator);
-                                }
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '0.6rem 0.85rem',
-                                borderRadius: 'var(--radius-sm)',
-                                backgroundColor: isUnlocked ? '#f0fdf4' : '#ffffff',
-                                border: isUnlocked ? '1px solid #bbf7d0' : '1px solid #f1f5f9',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                <div style={{
-                                  width: '26px',
-                                  height: '26px',
-                                  borderRadius: '9999px',
-                                  backgroundColor: isUnlocked ? 'var(--color-primary)' : '#e2e8f0',
-                                  color: isUnlocked ? '#fff' : '#64748b',
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          {(section.lessons || []).map((lesson) => {
+                            const isUnlocked = !lesson.is_locked;
+
+                            return (
+                              <div 
+                                key={lesson.id}
+                                onClick={() => {
+                                  if (isUnlocked) {
+                                    onOpenLesson(lesson, creator);
+                                  } else {
+                                    onOpenSubscribe(creator);
+                                  }
+                                }}
+                                style={{
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}>
-                                  {isUnlocked ? <Play size={12} fill="#fff" /> : <Lock size={12} />}
+                                  justifyContent: 'space-between',
+                                  padding: '0.6rem 0.85rem',
+                                  borderRadius: 'var(--radius-sm)',
+                                  backgroundColor: isUnlocked ? '#f0fdf4' : '#ffffff',
+                                  border: isUnlocked ? '1px solid #bbf7d0' : '1px solid #f1f5f9',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                  <div style={{
+                                    width: '26px',
+                                    height: '26px',
+                                    borderRadius: '9999px',
+                                    backgroundColor: isUnlocked ? 'var(--color-primary)' : '#e2e8f0',
+                                    color: isUnlocked ? '#fff' : '#64748b',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    {isUnlocked ? <Play size={12} fill="#fff" /> : <Lock size={12} />}
+                                  </div>
+
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: '600', color: isUnlocked ? '#0f172a' : '#475569' }}>
+                                        {lesson.title}
+                                      </span>
+                                      {lesson.is_free_preview && (
+                                        <span style={{
+                                          backgroundColor: '#dcfce7',
+                                          color: '#16a34a',
+                                          fontSize: '0.65rem',
+                                          fontWeight: '800',
+                                          padding: '0.05rem 0.35rem',
+                                          borderRadius: '9999px'
+                                        }}>
+                                          FREE SAMPLE
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span style={{ fontSize: '0.725rem', color: '#64748b' }}>
+                                      {lesson.duration_minutes} mins
+                                    </span>
+                                  </div>
                                 </div>
 
                                 <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <span style={{ fontSize: '0.85rem', fontWeight: '600', color: isUnlocked ? '#0f172a' : '#475569' }}>
-                                      {lesson.title}
+                                  {isUnlocked ? (
+                                    <span style={{ fontSize: '0.775rem', fontWeight: '700', color: 'var(--color-primary)' }}>
+                                      Watch →
                                     </span>
-                                    {lesson.is_free_preview && (
-                                      <span style={{
-                                        backgroundColor: '#dcfce7',
-                                        color: '#16a34a',
-                                        fontSize: '0.65rem',
-                                        fontWeight: '800',
-                                        padding: '0.05rem 0.35rem',
-                                        borderRadius: '9999px'
-                                      }}>
-                                        FREE SAMPLE
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span style={{ fontSize: '0.725rem', color: '#64748b' }}>
-                                    {lesson.duration_minutes} mins
-                                  </span>
+                                  ) : (
+                                    <span style={{ fontSize: '0.725rem', fontWeight: '600', color: '#94a3b8' }}>
+                                      Locked
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-
-                              <div>
-                                {isUnlocked ? (
-                                  <span style={{ fontSize: '0.775rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                                    Watch →
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: '0.725rem', fontWeight: '600', color: '#94a3b8' }}>
-                                    Locked
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 4. REVIEWS */}
         {reviews && reviews.length > 0 && (
@@ -1255,7 +1867,193 @@ export default function CreatorProfilePage({
                 </form>
               </div>
             )}
+          </div>
+        </div>
+      )}
 
+      {/* REDEEM ACCESS CODE MODAL */}
+      {redeemModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: 'var(--radius-lg)',
+            width: '100%',
+            maxWidth: '480px',
+            padding: '1.75rem',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+            border: '1px solid #e2e8f0',
+            position: 'relative'
+          }}>
+            <button 
+              type="button" 
+              onClick={() => setRedeemModalOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '1.25rem',
+                right: '1.25rem',
+                background: 'none',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                padding: '0.25rem'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            {redeemSuccess ? (
+              <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#dcfce7',
+                  color: '#15803d',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '1rem'
+                }}>
+                  <CheckCircle2 size={32} />
+                </div>
+
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.4rem' }}>
+                  {t('codeRedeemSuccess', 'Subscription Activated Successfully!')}
+                </h3>
+
+                <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                  {t('codeRedeemSuccessDesc', 'You now have 30 days of full access to all lessons, curriculum, and subscriber updates.')}
+                </p>
+
+                <div style={{
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.85rem',
+                  marginBottom: '1.5rem',
+                  fontSize: '0.85rem'
+                }}>
+                  <span style={{ color: '#166534', fontWeight: '700' }}>{t('enrolledActive', 'Active Access Until')}: </span>
+                  <strong style={{ color: '#15803d' }}>
+                    {redeemSuccess.subscription?.renewal_at ? new Date(redeemSuccess.subscription.renewal_at).toLocaleDateString() : '30 days from now'}
+                  </strong>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setRedeemModalOpen(false)}
+                  className="btn btn-primary"
+                  style={{ width: '100%', fontWeight: '700', padding: '0.65rem' }}
+                >
+                  {t('myLearning', 'Start Learning Now (ابدأ التعلم الآن)')} →
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#eff6ff',
+                    color: 'var(--color-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Key size={18} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                      {t('redeemModalTitle', 'Redeem Subscription Access Code')}
+                    </h3>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      {t('heroBadge2', 'Local 30-Day Voucher (بطاقات المكتبات)')}
+                    </span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                  {t('redeemModalDesc', 'Enter the prepaid voucher code from your partner bookshop to unlock 30-day access to this teacher.')}
+                </p>
+
+                {redeemError && (
+                  <div style={{
+                    backgroundColor: '#fef2f2',
+                    color: '#b91c1c',
+                    border: '1px solid #fecaca',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.65rem 0.85rem',
+                    fontSize: '0.825rem',
+                    marginBottom: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}>
+                    <AlertCircle size={15} />
+                    <span>{redeemError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleRedeemCode} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.35rem' }}>
+                      {t('redeemCodeBtn', 'Prepaid Access Code (كود الاشتراك)')}
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder={t('codePlaceholder', 'e.g. REED-2026-X8K2-9M4P')}
+                      value={redeemCodeInput}
+                      onChange={(e) => setRedeemCodeInput(e.target.value.toUpperCase())}
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '1.05rem',
+                        letterSpacing: '1.5px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        textAlign: 'center',
+                        padding: '0.75rem'
+                      }}
+                      required
+                      autoFocus
+                    />
+                    <span style={{ fontSize: '0.725rem', color: '#64748b', display: 'block', marginTop: '0.35rem' }}>
+                      {t('havePrepaidCode', 'Have a prepaid voucher from a bookshop or stationery center?')}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setRedeemModalOpen(false)}
+                      className="btn btn-secondary"
+                      style={{ flex: 1 }}
+                    >
+                      {t('cancel', 'Cancel')}
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={redeeming || !redeemCodeInput.trim()}
+                      style={{ flex: 2, fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                    >
+                      {redeeming ? t('activating', 'Activating...') : t('activateCodeBtn', 'Activate 30-Day Access')}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       )}

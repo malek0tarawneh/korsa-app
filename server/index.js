@@ -20,6 +20,8 @@ import creatorRoutes from './routes/creators.js';
 import leadMagnetRoutes from './routes/leadMagnets.js';
 import serviceRoutes from './routes/services.js';
 import referralRoutes from './routes/referrals.js';
+import codeRoutes from './routes/codes.js';
+import postRoutes from './routes/posts.js';
 import { requireRole } from './auth.js';
 
 const app = express();
@@ -45,6 +47,8 @@ app.use('/api/creators', creatorRoutes);
 app.use('/api/lead-magnets', leadMagnetRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/referrals', referralRoutes);
+app.use('/api/codes', codeRoutes);
+app.use('/api/posts', postRoutes);
 
 // Direct Audience Export: GET /api/teacher/audience/export-csv
 app.get('/api/teacher/audience/export-csv', requireRole('teacher'), async (req, res) => {

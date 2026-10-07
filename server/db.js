@@ -355,6 +355,30 @@ const POSTGRES_SCHEMA = `
     UNIQUE(student_id, teacher_id)
   );
 
+  CREATE TABLE IF NOT EXISTS access_codes (
+    id SERIAL PRIMARY KEY,
+    teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code TEXT UNIQUE NOT NULL,
+    batch_name TEXT,
+    price_jod INTEGER NOT NULL DEFAULT 10,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'redeemed', 'revoked')),
+    redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    redeemed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS teacher_posts (
+    id SERIAL PRIMARY KEY,
+    teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    media_url TEXT,
+    attachments TEXT DEFAULT '[]',
+    visibility TEXT NOT NULL DEFAULT 'public' CHECK(visibility IN ('public', 'subscribers')),
+    likes_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS platform_settings (
     id SERIAL PRIMARY KEY,
     key TEXT UNIQUE NOT NULL,
@@ -378,6 +402,11 @@ const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_payments_teacher_id ON payments(teacher_id);
   CREATE INDEX IF NOT EXISTS idx_progress_student_id ON progress(student_id);
   CREATE INDEX IF NOT EXISTS idx_reviews_teacher_id ON reviews(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_access_codes_teacher_id ON access_codes(teacher_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code);
+  CREATE INDEX IF NOT EXISTS idx_access_codes_status ON access_codes(status);
+  CREATE INDEX IF NOT EXISTS idx_teacher_posts_teacher_id ON teacher_posts(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_teacher_posts_created_at ON teacher_posts(created_at);
   CREATE INDEX IF NOT EXISTS idx_platform_settings_key ON platform_settings(key);
 `;
 
@@ -601,6 +630,33 @@ const SQLITE_SCHEMA = `
     FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS access_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    teacher_id INTEGER NOT NULL,
+    code TEXT UNIQUE NOT NULL,
+    batch_name TEXT,
+    price_jod INTEGER NOT NULL DEFAULT 10,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'redeemed', 'revoked')),
+    redeemed_by INTEGER,
+    redeemed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (redeemed_by) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS teacher_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    teacher_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    media_url TEXT,
+    attachments TEXT DEFAULT '[]',
+    visibility TEXT NOT NULL DEFAULT 'public' CHECK(visibility IN ('public', 'subscribers')),
+    likes_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS platform_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT UNIQUE NOT NULL,
@@ -624,6 +680,11 @@ const SQLITE_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_payments_teacher_id ON payments(teacher_id);
   CREATE INDEX IF NOT EXISTS idx_progress_student_id ON progress(student_id);
   CREATE INDEX IF NOT EXISTS idx_reviews_teacher_id ON reviews(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_access_codes_teacher_id ON access_codes(teacher_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code);
+  CREATE INDEX IF NOT EXISTS idx_access_codes_status ON access_codes(status);
+  CREATE INDEX IF NOT EXISTS idx_teacher_posts_teacher_id ON teacher_posts(teacher_id);
+  CREATE INDEX IF NOT EXISTS idx_teacher_posts_created_at ON teacher_posts(created_at);
   CREATE INDEX IF NOT EXISTS idx_platform_settings_key ON platform_settings(key);
 `;
 
@@ -757,6 +818,81 @@ export async function populateCreatorFlywheelDefaults() {
             INSERT INTO services (teacher_id, title, price_cents, duration_minutes, service_type, is_active)
             VALUES (?, ?, ?, ?, ?, 1)
           `).run(t.user_id, s.title, s.price_cents, s.duration_minutes, s.service_type);
+        }
+      }
+
+      // Seed default prepaid access codes if none exist
+      const codeCount = await db.prepare('SELECT COUNT(*) as count FROM access_codes WHERE teacher_id = ?').get(t.user_id);
+      if (Number(codeCount?.count || 0) === 0) {
+        const prefix = (handle || 'KORSA').toUpperCase();
+        const demoCodes = [
+          {
+            code: `${prefix}-2026-X8K2-9M4P`,
+            batch_name: 'Dar Al-Hikma Library - Amman (مكتبة دار الحكمة - عمان)',
+            price_jod: 10,
+            status: 'active'
+          },
+          {
+            code: `${prefix}-2026-7R3B-5T9N`,
+            batch_name: 'Dar Al-Hikma Library - Amman (مكتبة دار الحكمة - عمان)',
+            price_jod: 10,
+            status: 'active'
+          },
+          {
+            code: `${prefix}-2026-4L8Q-2W6Z`,
+            batch_name: 'University Bookshop - Irbid (مكتبة الجامعة - إربد)',
+            price_jod: 10,
+            status: 'active'
+          },
+          {
+            code: `${prefix}-2026-DEMO-USED`,
+            batch_name: 'Campus Copy Center (مركز التصوير الجامعي)',
+            price_jod: 10,
+            status: 'redeemed',
+            redeemed_by: 1,
+            redeemed_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+          }
+        ];
+
+        for (const c of demoCodes) {
+          await db.prepare(`
+            INSERT INTO access_codes (teacher_id, code, batch_name, price_jod, status, redeemed_by, redeemed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(t.user_id, c.code, c.batch_name, c.price_jod, c.status, c.redeemed_by || null, c.redeemed_at || null);
+        }
+      }
+
+      // Seed default teacher feed posts if none exist
+      const postCount = await db.prepare('SELECT COUNT(*) as count FROM teacher_posts WHERE teacher_id = ?').get(t.user_id);
+      if (Number(postCount?.count || 0) === 0) {
+        const defaultPosts = [
+          {
+            title: `Welcome to My 2026 Tawjihi Program (أهلاً بكم في دورة التوجيهي 2026)`,
+            content: `Hello students! I'm thrilled to open our direct learning hub on Korsa. You can download our free revision cheat sheets, ask questions, or activate prepaid access codes from local partner bookshops across Jordan. Let's make this semester extraordinary!`,
+            media_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            attachments: JSON.stringify([
+              { title: 'Tawjihi Roadmap 2026 Overview (PDF)', file_url: 'https://example.com/assets/cheat-sheet-roadmap.pdf', file_type: 'PDF' }
+            ]),
+            visibility: 'public',
+            likes_count: 34
+          },
+          {
+            title: `Exclusive Exam Drill: High-Yield Questions Breakdown (حل أسئلة امتحانات مقترحة للمشتركين)`,
+            content: `This deep-dive session is reserved for active subscribers and prepaid code holders. We break down the trickiest recurring questions from past ministry exams, showing the fastest shortcuts to avoid common pitfalls.`,
+            media_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            attachments: JSON.stringify([
+              { title: 'Worked Solutions & Marking Rubric (PDF)', file_url: 'https://example.com/assets/top-50-exam-solutions.pdf', file_type: 'PDF' }
+            ]),
+            visibility: 'subscribers',
+            likes_count: 58
+          }
+        ];
+
+        for (const p of defaultPosts) {
+          await db.prepare(`
+            INSERT INTO teacher_posts (teacher_id, title, content, media_url, attachments, visibility, likes_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(t.user_id, p.title, p.content, p.media_url, p.attachments, p.visibility, p.likes_count);
         }
       }
     }
