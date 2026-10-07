@@ -368,13 +368,13 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
           </div>
         ) : (
           <div className="grid-teachers" style={{ gap: '1.25rem' }}>
-            {teachers.map((t) => {
-              const priceJod = t.monthly_price_jod || Math.round(parseFloat(t.monthly_price || '10'));
-              const guideCount = t.lead_magnet_count || 1;
+            {(teachers || []).map((teacher) => {
+              const priceJod = teacher.monthly_price_jod || Math.round(parseFloat(teacher.monthly_price || '10'));
+              const guideCount = teacher.lead_magnet_count || 1;
 
               return (
                 <div 
-                  key={t.id} 
+                  key={teacher.id} 
                   className="card"
                   style={{
                     backgroundColor: '#ffffff',
@@ -389,10 +389,10 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                     transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                   }}
                   onClick={() => {
-                    if (onSelectCreator && t.handle) {
-                      onSelectCreator(t.handle);
+                    if (onSelectCreator && teacher.handle) {
+                      onSelectCreator(teacher.handle);
                     } else {
-                      onSelectTeacher(t.id);
+                      onSelectTeacher(teacher.id);
                     }
                   }}
                 >
@@ -400,8 +400,8 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                     {/* Header: Avatar, Name, Handle, Rating */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                       <img 
-                        src={t.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${t.name}`} 
-                        alt={t.name}
+                        src={teacher.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${teacher.name}`} 
+                        alt={teacher.name}
                         style={{ 
                           width: '52px', 
                           height: '52px', 
@@ -413,16 +413,16 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {t.name}
+                            {teacher.name}
                           </h3>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.825rem', fontWeight: '700', color: '#d97706' }}>
-                            <Star size={13} fill="#d97706" /> {t.rating?.toFixed(1) || '5.0'}
+                            <Star size={13} fill="#d97706" /> {teacher.rating?.toFixed(1) || '5.0'}
                           </div>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--color-primary)' }}>
-                            @{t.handle || `teacher${t.id}`}
+                            @{teacher.handle || `teacher${teacher.id}`}
                           </span>
                           <span style={{
                             fontSize: '0.675rem',
@@ -437,7 +437,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                         </div>
 
                         <p style={{ fontSize: '0.775rem', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {t.headline}
+                          {teacher.headline}
                         </p>
                       </div>
                     </div>
@@ -458,7 +458,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                         <Gift size={12} /> {guideCount} {isRTL ? 'دوسية مجانية' : (guideCount > 1 ? 'Free Study Guides' : 'Free Study Guide')}
                       </span>
 
-                      {t.cliq_alias && (
+                      {teacher.cliq_alias && (
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -470,14 +470,14 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                           padding: '0.15rem 0.5rem',
                           borderRadius: '9999px'
                         }}>
-                          CLIQ: {t.cliq_alias}
+                          CLIQ: {teacher.cliq_alias}
                         </span>
                       )}
                     </div>
 
                     {/* Subjects Badges */}
                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                      {t.subjects?.map((sub, i) => (
+                      {(teacher.subjects || []).map((sub, i) => (
                         <span key={i} style={{
                           fontSize: '0.7rem',
                           padding: '0.1rem 0.45rem',
@@ -490,7 +490,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                           {sub}
                         </span>
                       ))}
-                      {t.educational_levels?.slice(0, 1).map((lvl, i) => (
+                      {(teacher.educational_levels || []).slice(0, 1).map((lvl, i) => (
                         <span key={i} style={{
                           fontSize: '0.7rem',
                           padding: '0.1rem 0.45rem',
@@ -516,7 +516,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                       WebkitBoxOrient: 'vertical',
                       overflow: 'hidden'
                     }}>
-                      {t.bio}
+                      {teacher.bio}
                     </p>
                   </div>
 
@@ -543,10 +543,10 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onSelectCreator && t.handle) {
-                          onSelectCreator(t.handle);
+                        if (onSelectCreator && teacher.handle) {
+                          onSelectCreator(teacher.handle);
                         } else {
-                          onSelectTeacher(t.id);
+                          onSelectTeacher(teacher.id);
                         }
                       }}
                       className="btn btn-primary btn-sm"

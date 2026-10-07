@@ -184,7 +184,7 @@ export default function StudentDashboard({ onSelectTeacher, onSelectCreator, onO
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem' }}>
-                    {claimedDownloads.map((guide) => (
+                    {(claimedDownloads || []).map((guide) => (
                       <div 
                         key={guide.claim_id || guide.id}
                         style={{
@@ -288,7 +288,7 @@ export default function StudentDashboard({ onSelectTeacher, onSelectCreator, onO
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {serviceBookings.map((b) => {
+                    {(serviceBookings || []).map((b) => {
                       const isConfirmed = b.payment_status === 'confirmed' || b.status === 'confirmed';
                       const priceJod = b.price_jod || Math.round(b.price_cents / 100);
                       const whatsAppUrl = createWhatsAppCliqProofUrl({
@@ -443,7 +443,7 @@ export default function StudentDashboard({ onSelectTeacher, onSelectCreator, onO
                   <BookOpen size={16} /> Enrolled Classes ({subscriptions.length})
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
-                  {subscriptions.map((sub) => (
+                  {(subscriptions || []).map((sub) => (
                     <div 
                       key={sub.subscription_id || sub.id}
                       onClick={() => onSelectTeacher(sub.teacher_id)}

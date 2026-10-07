@@ -176,7 +176,7 @@ export default function CreatorProfilePage({
           if (!prev) return prev;
           return {
             ...prev,
-            lead_magnets: prev.lead_magnets.map(lm => 
+            lead_magnets: (prev.lead_magnets || []).map(lm => 
               lm.id === claimModal.leadMagnet.id ? { ...lm, downloads_count: Number(lm.downloads_count || 0) + 1 } : lm
             )
           };
@@ -498,12 +498,12 @@ export default function CreatorProfilePage({
             {creator.custom_bio || creator.bio}
           </p>
           <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-            {creator.subjects?.map((sub, idx) => (
+            {(creator.subjects || []).map((sub, idx) => (
               <span key={idx} style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', backgroundColor: '#eff6ff', color: '#1e40af', borderRadius: '4px', fontWeight: '500' }}>
                 {sub}
               </span>
             ))}
-            {creator.educational_levels?.map((lvl, idx) => (
+            {(creator.educational_levels || []).map((lvl, idx) => (
               <span key={idx} style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '4px', fontWeight: '500' }}>
                 {lvl}
               </span>
@@ -529,7 +529,7 @@ export default function CreatorProfilePage({
 
           {lead_magnets && lead_magnets.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-              {lead_magnets.map((lm) => (
+              {(lead_magnets || []).map((lm) => (
                 <div 
                   key={lm.id}
                   style={{
@@ -616,7 +616,7 @@ export default function CreatorProfilePage({
 
           {services && services.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-              {services.map((srv) => {
+              {(services || []).map((srv) => {
                 const srvPriceJod = srv.price_jod || Math.round(srv.price_cents / 100);
 
                 return (
@@ -709,7 +709,7 @@ export default function CreatorProfilePage({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {courses.map((course) => (
+            {(courses || []).map((course) => (
               <div 
                 key={course.id}
                 style={{
@@ -732,14 +732,14 @@ export default function CreatorProfilePage({
                 </div>
 
                 <div style={{ padding: '0.75rem 1.25rem' }}>
-                  {course.sections?.map((section) => (
+                  {(course.sections || []).map((section) => (
                     <div key={section.id} style={{ marginBottom: '0.75rem' }}>
                       <h5 style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
                         {section.title}
                       </h5>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                        {section.lessons?.map((lesson) => {
+                        {(section.lessons || []).map((lesson) => {
                           const isUnlocked = !lesson.is_locked;
 
                           return (
@@ -831,7 +831,7 @@ export default function CreatorProfilePage({
               Student Feedback
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
-              {reviews.map((rev) => (
+              {(reviews || []).map((rev) => (
                 <div 
                   key={rev.id}
                   style={{

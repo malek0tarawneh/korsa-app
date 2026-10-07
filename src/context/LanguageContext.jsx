@@ -233,11 +233,17 @@ const LanguageContext = createContext();
 
 export function LanguageProvider({ children }) {
   const [lang, setLang] = useState(() => {
-    return localStorage.getItem('korsa_lang') || 'ar';
+    try {
+      return localStorage.getItem('korsa_lang') || 'ar';
+    } catch {
+      return 'ar';
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem('korsa_lang', lang);
+    try {
+      localStorage.setItem('korsa_lang', lang);
+    } catch {}
     if (typeof document !== 'undefined') {
       document.documentElement.lang = lang;
       document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
@@ -248,16 +254,27 @@ export function LanguageProvider({ children }) {
     setLang(prev => (prev === 'ar' ? 'en' : 'ar'));
   };
 
+  const currentTranslations = translations[lang] || translations.en;
+
   const t = (key, fallback = '') => {
-    const langDict = translations[lang] || translations.en;
-    if (langDict && langDict[key] !== undefined) {
-      return langDict[key];
-    }
-    return fallback || key;
+    if (!key) return fallback || '';
+    return currentTranslations[key] !== undefined ? currentTranslations[key] : (fallback || key);
   };
 
+  // Attach translation dictionary directly to t function
+  Object.assign(t, currentTranslations);
+  t.terms = currentTranslations;
+  t.translations = currentTranslations;
+
   return (
-    <LanguageContext.Provider value={{ lang, setLang, toggleLanguage, t, isRTL: lang === 'ar' }}>
+    <LanguageContext.Provider value={{ 
+      lang, 
+      setLang, 
+      toggleLanguage, 
+      t, 
+      isRTL: lang === 'ar',
+      translations: currentTranslations 
+    }}>
       {children}
     </LanguageContext.Provider>
   );
@@ -266,7 +283,19 @@ export function LanguageProvider({ children }) {
 export function useLanguage() {
   const context = useContext(LanguageContext);
   if (!context) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
+    const fallbackDict = translations.ar;
+    const fallbackT = (key, fallback = '') => fallbackDict[key] || fallback || key;
+    Object.assign(fallbackT, fallbackDict);
+    fallbackT.terms = fallbackDict;
+    fallbackT.translations = fallbackDict;
+    return {
+      lang: 'ar',
+      setLang: () => {},
+      toggleLanguage: () => {},
+      t: fallbackT,
+      isRTL: true,
+      translations: fallbackDict
+    };
   }
   return context;
 }

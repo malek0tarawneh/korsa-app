@@ -214,7 +214,7 @@ export default function LessonModal({ isOpen, onClose, lesson, teacher, onSubscr
                 <FileText size={16} color="var(--color-primary)" /> Downloadable Permitted Resources
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {lesson.resources.map((res, i) => (
+                {(lesson.resources || []).map((res, i) => (
                   <div 
                     key={res.id || i}
                     style={{

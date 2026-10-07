@@ -384,7 +384,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {reviewsList.map((rev) => (
+                    {(reviewsList || []).map((rev) => (
                       <tr key={rev.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                         <td style={{ padding: '0.85rem 1rem', fontWeight: '600' }}>
                           {rev.student_name}
@@ -472,7 +472,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {recentPayments.map((p) => (
+                    {(recentPayments || []).map((p) => (
                       <tr key={p.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                         <td style={{ padding: '0.75rem 1rem', fontWeight: '600' }}>{p.student_name}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>{p.teacher_name}</td>
@@ -514,7 +514,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {usersList.map((u) => (
+                  {(usersList || []).map((u) => (
                     <tr key={u.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                       <td style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <img 

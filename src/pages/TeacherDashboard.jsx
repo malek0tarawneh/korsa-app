@@ -780,7 +780,7 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem' }}>
-                {serviceBookings.map((b) => {
+                {(serviceBookings || []).map((b) => {
                   const isConfirmed = b.payment_status === 'confirmed' || b.status === 'confirmed';
                   const priceJod = (b.price_cents / 100).toFixed(0);
 
@@ -936,7 +936,7 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
                 Your Active 1-on-1 Offerings ({services.length})
               </h4>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-                {services.map((srv) => {
+                {(services || []).map((srv) => {
                   const sPriceJod = (srv.price_cents / 100).toFixed(0);
 
                   return (
@@ -1051,7 +1051,7 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-                {leadMagnets.map((lm) => (
+                {(leadMagnets || []).map((lm) => (
                   <div
                     key={lm.id}
                     style={{
@@ -1287,7 +1287,7 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-                  {courses.map((c) => (
+                  {(courses || []).map((c) => (
                     <div
                       key={c.id}
                       style={{
@@ -1377,7 +1377,7 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                      {courseDetails.sections?.map((sec) => (
+                      {(courseDetails.sections || []).map((sec) => (
                         <div
                           key={sec.id}
                           style={{
@@ -1417,7 +1417,7 @@ export default function TeacherDashboard({ onSelectTeacher, onSelectCreator }) {
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {sec.lessons?.map((les) => (
+                            {(sec.lessons || []).map((les) => (
                               <div
                                 key={les.id}
                                 style={{

@@ -170,10 +170,10 @@ export default function TeacherProfilePage({
 
                 {/* Badges */}
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-                  {teacher.subjects.map((s, i) => (
+                  {(teacher.subjects || []).map((s, i) => (
                     <span key={i} className="badge" style={{ backgroundColor: '#eff6ff', color: '#1e40af' }}>{s}</span>
                   ))}
-                  {teacher.educational_levels.map((lvl, i) => (
+                  {(teacher.educational_levels || []).map((lvl, i) => (
                     <span key={i} className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>{lvl}</span>
                   ))}
                 </div>
@@ -257,7 +257,7 @@ export default function TeacherProfilePage({
               This teacher is preparing their first curriculum.
             </div>
           ) : (
-            courses.map((course) => (
+            (courses || []).map((course) => (
               <div key={course.id} className="card" style={{ marginBottom: '2rem', padding: '1.75rem' }}>
                 
                 {/* Course Header */}
@@ -280,14 +280,14 @@ export default function TeacherProfilePage({
 
                 {/* Course Sections & Lessons */}
                 <div>
-                  {course.sections && course.sections.map((section, sIndex) => (
+                  {(course.sections || []).map((section, sIndex) => (
                     <div key={section.id || sIndex} style={{ marginBottom: '1.5rem' }}>
                       <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#334155', marginBottom: '0.75rem' }}>
                         {section.title}
                       </h4>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                        {section.lessons && section.lessons.map((lesson) => (
+                        {(section.lessons || []).map((lesson) => (
                           <div
                             key={lesson.id}
                             onClick={() => onOpenLesson(lesson, teacher)}
@@ -366,7 +366,7 @@ export default function TeacherProfilePage({
           </h2>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-            {reviews.map((rev) => (
+            {(reviews || []).map((rev) => (
               <div key={rev.id} className="card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                   <img 
