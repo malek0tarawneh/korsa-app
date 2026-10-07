@@ -1,9 +1,19 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { createWhatsAppCliqProofUrl } from '../utils/whatsapp';
 import { X, CheckCircle, ShieldCheck, ArrowRight, Zap, Check } from 'lucide-react';
 
+const WhatsAppIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.149.929 3.182 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.768-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.173.086.274.072.376-.043.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.203c.043.072.043.419-.101.824z"/>
+    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2.05 21.65a.75.75 0 0 0 .927.927l4.482-1.388A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm-8.5 10c0-4.694 3.806-8.5 8.5-8.5s8.5 3.806 8.5 8.5-3.806 8.5-8.5 8.5a8.47 8.47 0 0 1-4.298-1.164.75.75 0 0 0-.49-.082l-3.268 1.012 1.012-3.268a.75.75 0 0 0-.082-.49A8.47 8.47 0 0 1 3.5 12z"/>
+  </svg>
+);
+
 export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) {
-  const { token, refreshUser } = useAuth();
+  const { user, token, refreshUser } = useAuth();
+  const { t, isRTL } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -16,6 +26,14 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
   const cliqAlias = teacher.cliq_alias || 'REEDMATH';
   const bankName = teacher.bank_name || 'Arab Bank (البنك العربي)';
   const walletPhone = teacher.wallet_phone || '0795551234';
+
+  const whatsAppUrl = createWhatsAppCliqProofUrl({
+    teacherPhone: walletPhone,
+    studentName: user?.name,
+    title: `اشتراك مادة ${teacher.name}`,
+    priceJod,
+    cliqRef
+  });
 
   const handleCopyAlias = () => {
     navigator.clipboard.writeText(cliqAlias);
@@ -63,16 +81,20 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '490px' }}>
         
         {/* Header */}
         <div className="modal-header">
           <div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: '700' }}>
-              {confirmed ? 'Subscription Enrolled!' : `Join ${teacher.name}'s Class`}
+              {confirmed 
+                ? (isRTL ? `تم تفعيل الاشتراك مع ${teacher.name}!` : `Subscription Enrolled with ${teacher.name}!`)
+                : (isRTL ? `الانضمام لمادة ${teacher.name}` : `Join ${teacher.name}'s Class`)}
             </h3>
             <p style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
-              Direct teacher payment via CLIQ / Zain Cash · 0% Platform Fee
+              {isRTL 
+                ? 'الدفع المباشر للمعلم عبر كليك / زين كاش · 0% عمولة منصة'
+                : 'Direct teacher payment via CLIQ / Zain Cash · 0% Platform Fee'}
             </p>
           </div>
           <button onClick={onClose} style={{ color: 'var(--color-text-muted)' }}>
@@ -109,11 +131,11 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
                   <h4 style={{ fontSize: '1rem', fontWeight: '700', margin: 0 }}>{teacher.name}</h4>
                   <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '2px 0 0 0' }}>{teacher.headline}</p>
                 </div>
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: isRTL ? 'left' : 'right' }}>
                   <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-secondary)' }}>
-                    {priceJod} JOD
+                    {priceJod} {t('jod', 'JOD')}
                   </div>
-                  <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>per month</div>
+                  <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{t('perMonth', '/ mo')}</div>
                 </div>
               </div>
 
@@ -127,16 +149,16 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#1e40af', textTransform: 'uppercase' }}>
-                    Teacher Payout Information
+                    {t('cliqPayoutInfo', 'Teacher Payout Information')}
                   </span>
                   <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#15803d', backgroundColor: '#dcfce7', padding: '0.1rem 0.5rem', borderRadius: 'var(--radius-full)' }}>
-                    0% Platform Fee
+                    {t('zeroFees', '0% Fees')}
                   </span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#475569' }}>CLIQ Alias:</span>
+                    <span style={{ color: '#475569' }}>{t('cliqAlias', 'CLIQ Alias')}:</span>
                     <button
                       type="button"
                       onClick={handleCopyAlias}
@@ -154,24 +176,24 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
                       }}
                     >
                       {copiedAlias ? <Check size={13} color="green" /> : null}
-                      {cliqAlias} {copiedAlias ? '(Copied)' : '(Copy)'}
+                      {cliqAlias} {copiedAlias ? `(${t('copied', 'Copied')})` : `(${t('copyCliq', 'Copy')})`}
                     </button>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#475569' }}>Bank:</span>
+                    <span style={{ color: '#475569' }}>{t('bank', 'Bank')}:</span>
                     <strong style={{ color: '#1e293b' }}>{bankName}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#475569' }}>Zain Cash / Orange:</span>
+                    <span style={{ color: '#475569' }}>{t('walletPhone', 'Zain Cash / Orange')}:</span>
                     <strong style={{ color: '#1e293b' }}>{walletPhone}</strong>
                   </div>
                 </div>
               </div>
 
               {/* Input for CLIQ Reference Number */}
-              <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: '600', marginBottom: '0.35rem' }}>
-                  CLIQ Transfer Reference Number (Optional or after transfer)
+                  {t('studentCliqRef', 'CLIQ Reference Number')}
                 </label>
                 <input 
                   type="text"
@@ -181,8 +203,37 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
                   onChange={(e) => setCliqRef(e.target.value)}
                 />
                 <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '4px' }}>
-                  Send {priceJod} JOD to the CLIQ alias above from your banking app. 100% of the payment goes straight to the teacher.
+                  {isRTL
+                    ? `حوّل ${priceJod} دينار أردني إلى اسم المستفيد أعلاه من تطبيق بنكك. 100% من المبلغ يذهب للمعلم مباشرة.`
+                    : `Send ${priceJod} JOD to the CLIQ alias above from your banking app. 100% goes directly to the teacher.`}
                 </span>
+              </div>
+
+              {/* WhatsApp Screenshot Proof Link Button */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <a
+                  href={whatsAppUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    backgroundColor: '#25D366',
+                    color: '#ffffff',
+                    fontWeight: '700',
+                    padding: '0.65rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    textDecoration: 'none',
+                    fontSize: '0.85rem',
+                    boxShadow: '0 2px 4px rgba(37, 211, 102, 0.25)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <WhatsAppIcon size={18} />
+                  <span>{t('sendWhatsAppProof', 'Send Transfer Screenshot on WhatsApp (إرسال الإشعار عبر واتساب)')}</span>
+                </a>
               </div>
 
               <button
@@ -191,7 +242,7 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
                 className="btn btn-primary"
                 style={{ width: '100%', padding: '0.75rem', fontWeight: '700' }}
               >
-                {loading ? 'Activating Access...' : `Confirm Enrollment (${priceJod} JOD / mo)`}
+                {loading ? 'Activating Access...' : (isRTL ? `تأكيد الاشتراك (${priceJod} دينار/شهرياً)` : `Confirm Enrollment (${priceJod} JOD / mo)`)}
               </button>
             </form>
           ) : (
@@ -210,17 +261,46 @@ export default function SubscribeModal({ isOpen, onClose, teacher, onSuccess }) 
                 <CheckCircle size={36} />
               </div>
               <h4 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem' }}>
-                Class Access Unlocked!
+                {isRTL ? 'تم فتح المادة بنجاح!' : 'Class Access Unlocked!'}
               </h4>
-              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem', maxWidth: '380px', margin: '0 auto 1.5rem auto', lineHeight: 1.5 }}>
-                You now have full access to <strong>{teacher.name}</strong>'s curriculum, study guides, and video lessons.
+              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', maxWidth: '380px', margin: '0 auto 1.25rem auto', lineHeight: 1.5 }}>
+                {isRTL 
+                  ? `أصبح بإمكانك الآن حضور جميع دروس مادة ${teacher.name} وتحميل الدوسيات.`
+                  : `You now have full access to ${teacher.name}'s curriculum, study guides, and video lessons.`}
               </p>
+
+              {/* WhatsApp button also on confirmed screen */}
+              <div style={{ marginBottom: '1rem' }}>
+                <a
+                  href={whatsAppUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    backgroundColor: '#25D366',
+                    color: '#ffffff',
+                    fontWeight: '700',
+                    padding: '0.65rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    textDecoration: 'none',
+                    fontSize: '0.85rem',
+                    boxShadow: '0 2px 4px rgba(37, 211, 102, 0.25)'
+                  }}
+                >
+                  <WhatsAppIcon size={18} />
+                  <span>{t('sendWhatsAppProof', 'Send Transfer Screenshot on WhatsApp (إرسال الإشعار عبر واتساب)')}</span>
+                </a>
+              </div>
+
               <button 
                 onClick={handleFinish} 
                 className="btn btn-primary" 
                 style={{ width: '100%' }}
               >
-                Start Learning Now <ArrowRight size={16} />
+                {isRTL ? 'ابدأ الدراسة الآن' : 'Start Learning Now'} <ArrowRight size={16} />
               </button>
             </div>
           )}

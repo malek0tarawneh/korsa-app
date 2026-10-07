@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { createWhatsAppCliqProofUrl } from '../utils/whatsapp';
 import { 
   Share2, 
   Copy, 
@@ -14,12 +15,19 @@ import {
   Play, 
   Lock, 
   ShieldCheck, 
-  Zap,
-  Calendar,
-  Gift,
-  Phone,
-  FileText
+  Zap, 
+  Calendar, 
+  Gift, 
+  Phone, 
+  FileText 
 } from 'lucide-react';
+
+const WhatsAppIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.149.929 3.182 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.768-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.173.086.274.072.376-.043.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.203c.043.072.043.419-.101.824z"/>
+    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2.05 21.65a.75.75 0 0 0 .927.927l4.482-1.388A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm-8.5 10c0-4.694 3.806-8.5 8.5-8.5s8.5 3.806 8.5 8.5-3.806 8.5-8.5 8.5a8.47 8.47 0 0 1-4.298-1.164.75.75 0 0 0-.49-.082l-3.268 1.012 1.012-3.268a.75.75 0 0 0-.082-.49A8.47 8.47 0 0 1 3.5 12z"/>
+  </svg>
+);
 
 const YoutubeIcon = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
@@ -1066,6 +1074,39 @@ export default function CreatorProfilePage({
                 <p style={{ fontSize: '0.825rem', color: '#64748b', lineHeight: 1.5, marginBottom: '1.25rem' }}>
                   {creator.name} will verify the CLIQ transfer in their banking app and confirm your session. You can track this under <strong>My Bookings</strong>.
                 </p>
+
+                {/* WhatsApp Proof Button */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <a
+                    href={createWhatsAppCliqProofUrl({
+                      teacherPhone: walletPhone,
+                      studentName: bookingName || user?.name,
+                      title: bookingModal.service?.title || 'الحصة الفردية',
+                      priceJod: bookingSuccess.booking?.price_jod || Math.round(bookingModal.service.price_cents / 100),
+                      cliqRef: bookingCliqRef
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.45rem',
+                      backgroundColor: '#25D366',
+                      color: '#ffffff',
+                      fontWeight: '700',
+                      padding: '0.65rem 1rem',
+                      borderRadius: 'var(--radius-md)',
+                      textDecoration: 'none',
+                      fontSize: '0.85rem',
+                      boxShadow: '0 2px 4px rgba(37, 211, 102, 0.25)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <WhatsAppIcon size={18} />
+                    <span>Send Transfer Screenshot on WhatsApp (إرسال الإشعار عبر واتساب)</span>
+                  </a>
+                </div>
 
                 <button 
                   onClick={() => setBookingModal({ isOpen: false, service: null })}

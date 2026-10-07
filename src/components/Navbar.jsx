@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   GraduationCap, 
   BookOpen, 
@@ -9,11 +10,13 @@ import {
   User, 
   Zap,
   Menu,
-  X
+  X,
+  Globe
 } from 'lucide-react';
 
 export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
   const { user, logout, quickLogin } = useAuth();
+  const { lang, toggleLanguage, t, isRTL } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [demoDropdownOpen, setDemoDropdownOpen] = useState(false);
 
@@ -63,10 +66,10 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
           </div>
           <div>
             <span style={{ fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.02em', color: 'var(--color-secondary)' }}>
-              Korsa
+              {t('appName', 'Korsa')}
             </span>
             <span style={{ fontSize: '0.65rem', display: 'block', color: 'var(--color-text-muted)', marginTop: '-4px', fontWeight: '600' }}>
-              DIRECT TEACHER PLATFORM
+              {t('platformTagline', 'DIRECT TEACHER PLATFORM')}
             </span>
           </div>
         </div>
@@ -81,7 +84,7 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
               fontSize: '0.925rem'
             }}
           >
-            Home
+            {t('home', 'Home')}
           </button>
           
           <button 
@@ -92,7 +95,7 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
               fontSize: '0.925rem'
             }}
           >
-            Find Teachers
+            {t('findTeachers', 'Find Teachers')}
           </button>
 
           {user && user.role === 'student' && (
@@ -107,7 +110,7 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                 gap: '0.35rem'
               }}
             >
-              <BookOpen size={16} /> My Learning
+              <BookOpen size={16} /> {t('myLearning', 'My Learning')}
             </button>
           )}
 
@@ -123,7 +126,7 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                 gap: '0.35rem'
               }}
             >
-              <LayoutDashboard size={16} /> Teacher Workspace
+              <LayoutDashboard size={16} /> {t('teacherWorkspace', 'Teacher Workspace')}
             </button>
           )}
 
@@ -139,14 +142,34 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                 gap: '0.35rem'
               }}
             >
-              <ShieldCheck size={16} /> Admin Hub
+              <ShieldCheck size={16} /> {t('adminHub', 'Admin Hub')}
             </button>
           )}
         </nav>
 
-        {/* Right Action: Quick Demo Switcher + Auth Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+        {/* Right Action: Language Switch + Quick Demo Switcher + Auth Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           
+          {/* Language Switch Button (EN | العربية) */}
+          <button
+            onClick={toggleLanguage}
+            className="btn btn-secondary btn-sm"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontWeight: '700',
+              padding: '0.35rem 0.65rem',
+              borderColor: '#cbd5e1'
+            }}
+            title="Switch Language / تبديل اللغة"
+          >
+            <Globe size={14} color="var(--color-primary)" />
+            <span style={{ fontSize: '0.8rem' }}>
+              {lang === 'ar' ? 'English' : 'العربية'}
+            </span>
+          </button>
+
           {/* Quick Demo Switcher Pill */}
           <div style={{ position: 'relative' }}>
             <button 
@@ -157,14 +180,14 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
             >
               <Zap size={14} color="#f59e0b" fill="#f59e0b" />
               <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>
-                {user ? `Role: ${user.role.toUpperCase()}` : 'Quick Switch'}
+                {user ? `${t('switchRole', 'Role')}: ${user.role.toUpperCase()}` : t('switchRole', 'Quick Switch')}
               </span>
             </button>
 
             {demoDropdownOpen && (
               <div style={{
                 position: 'absolute',
-                right: 0,
+                [isRTL ? 'left' : 'right']: 0,
                 top: '110%',
                 backgroundColor: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
@@ -186,13 +209,13 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                     width: '100%',
                     padding: '0.5rem',
                     borderRadius: 'var(--radius-sm)',
-                    textAlign: 'left',
+                    textAlign: isRTL ? 'right' : 'left',
                     fontSize: '0.85rem'
                   }}
                   onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--color-surface-hover)'}
                   onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                 >
-                  <span className="badge badge-role student">Student</span> Adam Miller
+                  <span className="badge badge-role student">{t('roleStudent', 'Student')}</span> Adam Miller
                 </button>
                 <button
                   onClick={() => handleQuickSwitch('teacher')}
@@ -203,13 +226,13 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                     width: '100%',
                     padding: '0.5rem',
                     borderRadius: 'var(--radius-sm)',
-                    textAlign: 'left',
+                    textAlign: isRTL ? 'right' : 'left',
                     fontSize: '0.85rem'
                   }}
                   onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--color-surface-hover)'}
                   onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                 >
-                  <span className="badge badge-role teacher">Teacher</span> Dr. Jordan Reed
+                  <span className="badge badge-role teacher">{t('roleTeacher', 'Teacher')}</span> Dr. Reed
                 </button>
                 <button
                   onClick={() => handleQuickSwitch('admin')}
@@ -220,22 +243,29 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                     width: '100%',
                     padding: '0.5rem',
                     borderRadius: 'var(--radius-sm)',
-                    textAlign: 'left',
+                    textAlign: isRTL ? 'right' : 'left',
                     fontSize: '0.85rem'
                   }}
                   onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--color-surface-hover)'}
                   onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                 >
-                  <span className="badge badge-role admin">Admin</span> Administrator
+                  <span className="badge badge-role admin">{t('roleAdmin', 'Admin')}</span> Sarah Jenkins
                 </button>
               </div>
             )}
           </div>
 
-          {/* User Profile or Login */}
+          {/* User Profile / Auth State */}
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div 
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+                onClick={() => {
+                  if (user.role === 'student') setCurrentView('student-dashboard');
+                  if (user.role === 'teacher') setCurrentView('teacher-dashboard');
+                  if (user.role === 'admin') setCurrentView('admin-dashboard');
+                }}
+              >
                 <img 
                   src={user.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${user.name}`} 
                   alt={user.name} 
@@ -248,7 +278,7 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
               <button 
                 onClick={logout} 
                 className="btn btn-secondary btn-sm"
-                title="Log out"
+                title={t('logout', 'Log Out')}
                 style={{ padding: '0.4rem 0.6rem' }}
               >
                 <LogOut size={16} />
@@ -260,13 +290,13 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
                 onClick={() => openAuthModal('login')} 
                 className="btn btn-secondary btn-sm"
               >
-                Log In
+                {t('login', 'Log In')}
               </button>
               <button 
                 onClick={() => openAuthModal('register')} 
                 className="btn btn-primary btn-sm"
               >
-                Register
+                {t('register', 'Register')}
               </button>
             </div>
           )}
@@ -292,25 +322,37 @@ export default function Navbar({ currentView, setCurrentView, openAuthModal }) {
           flexDirection: 'column',
           gap: '0.75rem'
         }}>
-          <button onClick={() => handleNav('landing')} style={{ textAlign: 'left', padding: '0.5rem', fontWeight: '600' }}>
-            Home
+          {/* Mobile Language switch */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--color-text-muted)' }}>اللغة / Language:</span>
+            <button
+              onClick={toggleLanguage}
+              className="btn btn-secondary btn-sm"
+              style={{ fontWeight: '700' }}
+            >
+              <Globe size={14} /> {lang === 'ar' ? 'English' : 'العربية'}
+            </button>
+          </div>
+
+          <button onClick={() => handleNav('landing')} style={{ textAlign: isRTL ? 'right' : 'left', padding: '0.5rem', fontWeight: '600' }}>
+            {t('home', 'Home')}
           </button>
-          <button onClick={() => handleNav('explore')} style={{ textAlign: 'left', padding: '0.5rem', fontWeight: '600' }}>
-            Find Teachers
+          <button onClick={() => handleNav('explore')} style={{ textAlign: isRTL ? 'right' : 'left', padding: '0.5rem', fontWeight: '600' }}>
+            {t('findTeachers', 'Find Teachers')}
           </button>
           {user?.role === 'student' && (
-            <button onClick={() => handleNav('student-dashboard')} style={{ textAlign: 'left', padding: '0.5rem', fontWeight: '600' }}>
-              My Learning
+            <button onClick={() => handleNav('student-dashboard')} style={{ textAlign: isRTL ? 'right' : 'left', padding: '0.5rem', fontWeight: '600' }}>
+              {t('myLearning', 'My Learning')}
             </button>
           )}
           {user?.role === 'teacher' && (
-            <button onClick={() => handleNav('teacher-dashboard')} style={{ textAlign: 'left', padding: '0.5rem', fontWeight: '600' }}>
-              Teacher Workspace
+            <button onClick={() => handleNav('teacher-dashboard')} style={{ textAlign: isRTL ? 'right' : 'left', padding: '0.5rem', fontWeight: '600' }}>
+              {t('teacherWorkspace', 'Teacher Workspace')}
             </button>
           )}
           {user?.role === 'admin' && (
-            <button onClick={() => handleNav('admin-dashboard')} style={{ textAlign: 'left', padding: '0.5rem', fontWeight: '600' }}>
-              Admin Hub
+            <button onClick={() => handleNav('admin-dashboard')} style={{ textAlign: isRTL ? 'right' : 'left', padding: '0.5rem', fontWeight: '600' }}>
+              {t('adminHub', 'Admin Hub')}
             </button>
           )}
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   Search, 
   BookOpen, 
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 
 export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAuth }) {
+  const { t, isRTL } = useLanguage();
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState('all');
@@ -54,21 +56,21 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
   };
 
   const subjectsList = [
-    { label: 'All Subjects', value: 'all' },
-    { label: 'Tawjihi (توجيهي)', value: 'Tawjihi' },
-    { label: 'Mathematics', value: 'Mathematics' },
-    { label: 'Physics', value: 'Physics' },
-    { label: 'English', value: 'English' },
-    { label: 'Chemistry', value: 'Chemistry' },
-    { label: 'Computer Science', value: 'Computer Science' }
+    { label: t('allSubjects', 'All Subjects'), value: 'all' },
+    { label: t('tawjihi', 'Tawjihi (توجيهي)'), value: 'Tawjihi' },
+    { label: t('mathematics', 'Mathematics'), value: 'Mathematics' },
+    { label: t('physics', 'Physics'), value: 'Physics' },
+    { label: t('english', 'English'), value: 'English' },
+    { label: t('chemistry', 'Chemistry'), value: 'Chemistry' },
+    { label: t('computerScience', 'Computer Science'), value: 'Computer Science' }
   ];
 
   const gradesList = [
-    { label: 'All Levels', value: 'all' },
-    { label: 'Grade 12 (Tawjihi)', value: 'Grade 12' },
-    { label: 'Grade 11', value: 'Grade 11' },
-    { label: 'Grade 10', value: 'Grade 10' },
-    { label: 'University', value: 'University' }
+    { label: t('allLevels', 'All Levels'), value: 'all' },
+    { label: t('grade12', 'Grade 12 (Tawjihi)'), value: 'Grade 12' },
+    { label: t('grade11', 'Grade 11'), value: 'Grade 11' },
+    { label: t('grade10', 'Grade 10'), value: 'Grade 10' },
+    { label: t('university', 'University'), value: 'University' }
   ];
 
   return (
@@ -98,7 +100,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
               color: '#1d4ed8'
             }}>
               <Sparkles size={14} color="#2563eb" />
-              100% Free Platform · 0% Fees
+              {t('heroBadge1', '100% Free Platform · 0% Fees')}
             </span>
 
             <span style={{
@@ -114,7 +116,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
               color: '#065f46'
             }}>
               <CheckCircle2 size={14} color="#059669" />
-              Local CLIQ & Zain Cash Payments (JOD)
+              {t('heroBadge2', 'Local CLIQ & Zain Cash Payments (JOD)')}
             </span>
           </div>
 
@@ -127,7 +129,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
             marginBottom: '1rem',
             fontFamily: 'system-ui, -apple-system, sans-serif'
           }}>
-            Learn directly from independent teachers in Jordan.
+            {t('heroTitle', 'Learn directly from independent teachers in Jordan.')}
           </h1>
 
           <p style={{
@@ -137,7 +139,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
             maxWidth: '640px',
             margin: '0 auto 1.75rem auto'
           }}>
-            Download free Tawjihi study guides, watch open lessons, and book 1-on-1 sessions directly via CLIQ or Zain Cash with zero middleman fees.
+            {t('heroSubtitle', 'Download free Tawjihi study guides, watch open lessons, and book 1-on-1 sessions directly via CLIQ or Zain Cash with zero middleman fees.')}
           </p>
 
           {/* Clean Action Buttons */}
@@ -150,14 +152,14 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
               className="btn btn-primary btn-md"
               style={{ fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
             >
-              Browse Teachers & Guides <ArrowRight size={16} />
+              {t('browseTeachersBtn', 'Browse Teachers & Guides')} <ArrowRight size={16} />
             </button>
             <button 
               onClick={() => onOpenAuth('register')}
               className="btn btn-secondary btn-md"
               style={{ fontWeight: '600' }}
             >
-              Free Student Sign Up
+              {t('freeSignupBtn', 'Free Student Sign Up')}
             </button>
           </div>
 
@@ -171,13 +173,13 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
             flexWrap: 'wrap'
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <CheckCircle2 size={15} color="#10b981" /> Free Downloadable PDFs
+              <CheckCircle2 size={15} color="#10b981" /> {t('freePdfsGuarantee', 'Free Downloadable PDFs')}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <CheckCircle2 size={15} color="#10b981" /> 1-on-1 Help in Jordanian Dinars (JOD)
+              <CheckCircle2 size={15} color="#10b981" /> {t('jodGuarantee', '1-on-1 Help in Jordanian Dinars (JOD)')}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <CheckCircle2 size={15} color="#10b981" /> Direct Teacher Confirmation
+              <CheckCircle2 size={15} color="#10b981" /> {t('directConfirmGuarantee', 'Direct Teacher Confirmation')}
             </span>
           </div>
 
@@ -198,26 +200,26 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
         }}>
           <div>
             <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.02em', margin: 0 }}>
-              Find Teachers & Study Guides
+              {isRTL ? 'تصفح المعلمين والدوسيات المجانية' : 'Find Teachers & Study Guides'}
             </h2>
             <p style={{ fontSize: '0.9rem', color: '#64748b', margin: '4px 0 0 0' }}>
-              Search by teacher name, subject, or Tawjihi level.
+              {isRTL ? 'ابحث باسم المعلم، المادة، أو الفرع والتوجيهي.' : 'Search by teacher name, subject, or Tawjihi level.'}
             </p>
           </div>
 
           {/* Minimalist Search Bar */}
           <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.5rem', width: '100%', maxWidth: '380px' }}>
             <div style={{ position: 'relative', flex: 1 }}>
-              <Search size={17} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <Search size={17} style={{ position: 'absolute', [isRTL ? 'right' : 'left']: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input 
                 type="text"
-                placeholder="Search teacher or topic..."
+                placeholder={t('searchPlaceholder', 'Search teacher or topic...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="form-input"
                 style={{
-                  paddingLeft: '2.4rem',
-                  paddingRight: searchQuery ? '2rem' : '0.9rem',
+                  paddingLeft: isRTL ? '0.9rem' : '2.4rem',
+                  paddingRight: isRTL ? '2.4rem' : (searchQuery ? '2rem' : '0.9rem'),
                   borderRadius: 'var(--radius-md)',
                   borderColor: '#cbd5e1',
                   backgroundColor: '#ffffff'
@@ -229,7 +231,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                   onClick={() => setSearchQuery('')}
                   style={{
                     position: 'absolute',
-                    right: '10px',
+                    [isRTL ? 'left' : 'right']: '10px',
                     top: '50%',
                     transform: 'translateY(-50%)',
                     color: '#94a3b8',
@@ -242,7 +244,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
               )}
             </div>
             <button type="submit" className="btn btn-secondary" style={{ fontWeight: '600' }}>
-              Search
+              {t('searchBtn', 'Search')}
             </button>
           </form>
         </div>
@@ -260,7 +262,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#475569', minWidth: '60px' }}>
-              Subject:
+              {t('subjectLabel', 'Subject:')}
             </span>
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
               {subjectsList.map((s) => (
@@ -287,7 +289,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#475569', minWidth: '60px' }}>
-              Level:
+              {t('levelLabel', 'Level:')}
             </span>
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
               {gradesList.map((g) => (
@@ -323,10 +325,10 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
           color: '#64748b'
         }}>
           <div>
-            Showing <strong>{teachers.length}</strong> {teachers.length === 1 ? 'teacher' : 'teachers'}
-            {selectedSubject !== 'all' && <span> in <strong>{selectedSubject}</strong></span>}
-            {selectedGrade !== 'all' && <span> for <strong>{selectedGrade}</strong></span>}
-            {searchQuery.trim() && <span> matching "<strong>{searchQuery.trim()}</strong>"</span>}
+            {t('showingTeachers', 'Showing')} <strong>{teachers.length}</strong> {teachers.length === 1 ? (isRTL ? 'معلم' : 'teacher') : (isRTL ? 'معلمين' : 'teachers')}
+            {selectedSubject !== 'all' && <span> {isRTL ? 'في' : 'in'} <strong>{selectedSubject}</strong></span>}
+            {selectedGrade !== 'all' && <span> {isRTL ? 'لصف' : 'for'} <strong>{selectedGrade}</strong></span>}
+            {searchQuery.trim() && <span> {isRTL ? 'مطابق لـ' : 'matching'} "<strong>{searchQuery.trim()}</strong>"</span>}
           </div>
 
           {(selectedSubject !== 'all' || selectedGrade !== 'all' || searchQuery.trim()) && (
@@ -334,7 +336,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
               onClick={() => { setSelectedSubject('all'); setSelectedGrade('all'); setSearchQuery(''); }}
               style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: '0.825rem', cursor: 'pointer' }}
             >
-              Reset Filters ✕
+              {t('resetFilters', 'Reset Filters')} ✕
             </button>
           )}
         </div>
@@ -453,7 +455,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                         padding: '0.15rem 0.5rem',
                         borderRadius: '9999px'
                       }}>
-                        <Gift size={12} /> {guideCount} Free Study Guide{guideCount > 1 ? 's' : ''}
+                        <Gift size={12} /> {guideCount} {isRTL ? 'دوسية مجانية' : (guideCount > 1 ? 'Free Study Guides' : 'Free Study Guide')}
                       </span>
 
                       {t.cliq_alias && (
@@ -529,12 +531,12 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                     <div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
                         <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a' }}>
-                          {priceJod} JOD
+                          {priceJod} {t('jod', 'JOD')}
                         </span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>/ mo</span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{t('perMonth', '/ mo')}</span>
                       </div>
                       <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: '700' }}>
-                        Free Guides Included
+                        {t('freeGuidesIncluded', 'Free Guides Included')}
                       </div>
                     </div>
 
@@ -550,7 +552,7 @@ export default function LandingPage({ onSelectTeacher, onSelectCreator, onOpenAu
                       className="btn btn-primary btn-sm"
                       style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: '700' }}
                     >
-                      View Profile <ArrowRight size={13} />
+                      {t('viewProfile', 'View Profile')} <ArrowRight size={13} />
                     </button>
                   </div>
                 </div>
